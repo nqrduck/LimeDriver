@@ -40,10 +40,11 @@ class limr:
         in_arg = json.loads(p.stdout.read().decode("utf-8"))
 
         # initialize the parameters
-        for key, value in in_arg.items():
-            setattr(self, key, value)
+        for key, in in_arg.keys():
+            in_arg[key]["argument"] = []
+            setattr(self, key, [])
 
-        self.parsinp = in_arg # TODO: *Either* store the parameters in a dict or as attributes, not both
+        self.parsinp = in_arg
 
         # initialize other variables
         self.parvar = {}
@@ -59,7 +60,7 @@ class limr:
         for key in sorted(self.parsinp.keys()):
             val = getattr(self, key)
             if (val != []) | (allel):
-                print("{:<5}: {:>50}    {:<25}".format(key, val, self.parsinp[key]))
+                print("{:<5}: {:>50}    {:<25}".format(key, val, self.parsinp[key]["name"]))
 
     # add parameter variation:
     # key is the argument to vary
