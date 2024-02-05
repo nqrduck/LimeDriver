@@ -314,63 +314,67 @@ void dumpConfig(Config2HDFattr_t *config, size_t size) {
   std::cout << "}" << std::endl;
 }
 
-void initializeLimeConfig(LimeConfig_t *LimeCfg, int Npulses, std::ostringstream &stringstream) {
+LimeConfig_t initializeLimeConfig(int Npulses, std::ostringstream &stringstream) {
   /* Initialize the LimeConfig_t struct
 
-  @param LimeCfg: Pointer to LimeConfig_t struct
+  @param Npulses: Number of pulses
+  @param stringstream: std::ostringstream object
+
+  @return LimeConfig_t: LimeConfig_t struct with default values
 
   */
+  LimeConfig_t LimeCfg;
 
-  LimeCfg->Npulses = Npulses;
+  LimeCfg.Npulses = Npulses;
   
   // Set all the DEFAULT parameters. Command line arguments allow for
   // modification!
 
-  LimeCfg->srate = 30.72e6; // sample rate of the IF DAC/ADC
-  LimeCfg->frq = 50e6;      // LO carrier frequency
-  LimeCfg->RX_gain = 20;    // total gain of the receiver
-  LimeCfg->TX_gain = 30;    // total gain of the transmitter
-  LimeCfg->RX_LPF = 5e6;    // IF lowpass of the receiver
-  LimeCfg->TX_LPF = 130e6;  // IF lowpass of the transmitter
+  LimeCfg.srate = 30.72e6; // sample rate of the IF DAC/ADC
+  LimeCfg.frq = 50e6;      // LO carrier frequency
+  LimeCfg.RX_gain = 20;    // total gain of the receiver
+  LimeCfg.TX_gain = 30;    // total gain of the transmitter
+  LimeCfg.RX_LPF = 5e6;    // IF lowpass of the receiver
+  LimeCfg.TX_LPF = 130e6;  // IF lowpass of the transmitter
 
-  LimeCfg->TX_IcorrDC =
+  LimeCfg.TX_IcorrDC =
       -32; // DC corr to TX mixer at IF (evaluate with LimeSuiteGUI)
-  LimeCfg->TX_QcorrDC = 50; // DC corr to TX mixer at IF
+  LimeCfg.TX_QcorrDC = 50; // DC corr to TX mixer at IF
 
   // Allocate the arrays with pulse parametes
-  LimeCfg->p_dur = new double[LimeCfg->Npulses]; // pulse duration (secs)
-  LimeCfg->p_offs = new int[LimeCfg->Npulses];   // pulse time offset
-  LimeCfg->p_amp = new double[LimeCfg->Npulses]; // pulse digital IF amplitude
-  LimeCfg->p_frq =
-      new double[LimeCfg->Npulses]; // pulse digital IF frequency (unit: Hz)
-  LimeCfg->p_pha = new double[LimeCfg->Npulses]; // pulse digital IF phase
-  LimeCfg->p_phacyc_N =
-      new int[LimeCfg->Npulses]; // number of pulse phases (cycled within 2*pi,
+  LimeCfg.p_dur = new double[LimeCfg.Npulses]; // pulse duration (secs)
+  LimeCfg.p_offs = new int[LimeCfg.Npulses];   // pulse time offset
+  LimeCfg.p_amp = new double[LimeCfg.Npulses]; // pulse digital IF amplitude
+  LimeCfg.p_frq =
+      new double[LimeCfg.Npulses]; // pulse digital IF frequency (unit: Hz)
+  LimeCfg.p_pha = new double[LimeCfg.Npulses]; // pulse digital IF phase
+  LimeCfg.p_phacyc_N =
+      new int[LimeCfg.Npulses]; // number of pulse phases (cycled within 2*pi,
                                 // must be at least 1)
-  LimeCfg->p_phacyc_lev =
-      new int[LimeCfg->Npulses]; // stacking level of phase cycle (for eventual
+  LimeCfg.p_phacyc_lev =
+      new int[LimeCfg.Npulses]; // stacking level of phase cycle (for eventual
                                 // coupling)
-  LimeCfg->p_c0_en = new int[LimeCfg->Npulses]; // pulse-wise enable of marker c0
-  LimeCfg->p_c1_en = new int[LimeCfg->Npulses]; // pulse-wise enable of marker c1
-  LimeCfg->p_c2_en = new int[LimeCfg->Npulses]; // pulse-wise enable of marker c2
-  LimeCfg->p_c3_en = new int[LimeCfg->Npulses]; // pulse-wise enable of marker c3
+  LimeCfg.p_c0_en = new int[LimeCfg.Npulses]; // pulse-wise enable of marker c0
+  LimeCfg.p_c1_en = new int[LimeCfg.Npulses]; // pulse-wise enable of marker c1
+  LimeCfg.p_c2_en = new int[LimeCfg.Npulses]; // pulse-wise enable of marker c2
+  LimeCfg.p_c3_en = new int[LimeCfg.Npulses]; // pulse-wise enable of marker c3
 
   // and set standard values
-  for (int ii = 0; ii < LimeCfg->Npulses; ii++) {
+  for (int ii = 0; ii < LimeCfg.Npulses; ii++) {
 
-    LimeCfg->p_dur[ii] = 2e-6;
-    LimeCfg->p_offs[ii] =
+    LimeCfg.p_dur[ii] = 2e-6;
+    LimeCfg.p_offs[ii] =
         (4080 * 3) /
-        (LimeCfg->Npulses + 1); // distribute them evenly within the buffer...
-    LimeCfg->p_amp[ii] = 1.0;
-    LimeCfg->p_frq[ii] = 4.0 / LimeCfg->p_dur[0];
-    LimeCfg->p_pha[ii] = 0.0;
-    LimeCfg->p_phacyc_N[ii] = 1;
-    LimeCfg->p_phacyc_lev[ii] = 0;
-    LimeCfg->p_c0_en[ii] = 1;
-    LimeCfg->p_c1_en[ii] = 1;
-    LimeCfg->p_c2_en[ii] = 1;
-    LimeCfg->p_c3_en[ii] = 1;
+        (LimeCfg.Npulses + 1); // distribute them evenly within the buffer...
+    LimeCfg.p_amp[ii] = 1.0;
+    LimeCfg.p_frq[ii] = 4.0 / LimeCfg.p_dur[0];
+    LimeCfg.p_pha[ii] = 0.0;
+    LimeCfg.p_phacyc_N[ii] = 1;
+    LimeCfg.p_phacyc_lev[ii] = 0;
+    LimeCfg.p_c0_en[ii] = 1;
+    LimeCfg.p_c1_en[ii] = 1;
+    LimeCfg.p_c2_en[ii] = 1;
+    LimeCfg.p_c3_en[ii] = 1;
   }
 
   // Timing of TTL controls: [enabled? , pre, offs, post]
@@ -386,49 +390,50 @@ void initializeLimeConfig(LimeConfig_t *LimeCfg, int Npulses, std::ostringstream
   int c2_synth[5] = {0, 500, 0, 0, 0};
   int c3_synth[5] = {0, 500, 0, 0, 0};
 
-  LimeCfg->averages = 6;          // number of averages
-  LimeCfg->repetitions = 4;       // number of repetions
-  LimeCfg->reptime_secs = 4e-3;   // repetition time
-  LimeCfg->rectime_secs = 0.2e-3; // duration of acquisition window
-  LimeCfg->buffersize = 4080 * 3; // number of samples in buffer
-  LimeCfg->pcyc_bef_avg = 0;      // phase cycle before average
+  LimeCfg.averages = 6;          // number of averages
+  LimeCfg.repetitions = 4;       // number of repetions
+  LimeCfg.reptime_secs = 4e-3;   // repetition time
+  LimeCfg.rectime_secs = 0.2e-3; // duration of acquisition window
+  LimeCfg.buffersize = 4080 * 3; // number of samples in buffer
+  LimeCfg.pcyc_bef_avg = 0;      // phase cycle before average
 
-  LimeCfg->file_pattern = "test"; // identifier when saving the file
-  LimeCfg->save_path = "./data/"; // path to save the file to
-  LimeCfg->override_save = 0;     // default: save data
+  LimeCfg.file_pattern = "test"; // identifier when saving the file
+  LimeCfg.save_path = "./data/"; // path to save the file to
+  LimeCfg.override_save = 0;     // default: save data
 
     // that's it for the parameters
   // ----------------------------------------------------------------------------------
 
   // .. copy here those arrays ...
-  memcpy(LimeCfg->c0_tim, c0_tim, 4 * sizeof *LimeCfg->c0_tim);
-  memcpy(LimeCfg->c1_tim, c1_tim, 4 * sizeof *LimeCfg->c1_tim);
-  memcpy(LimeCfg->c2_tim, c2_tim, 4 * sizeof *LimeCfg->c2_tim);
-  memcpy(LimeCfg->c3_tim, c3_tim, 4 * sizeof *LimeCfg->c3_tim);
-  memcpy(LimeCfg->c0_synth, c0_synth, 5 * sizeof *LimeCfg->c0_synth);
-  memcpy(LimeCfg->c1_synth, c1_synth, 5 * sizeof *LimeCfg->c1_synth);
-  memcpy(LimeCfg->c2_synth, c2_synth, 5 * sizeof *LimeCfg->c2_synth);
-  memcpy(LimeCfg->c3_synth, c3_synth, 5 * sizeof *LimeCfg->c3_synth);
+  memcpy(LimeCfg.c0_tim, c0_tim, 4 * sizeof *LimeCfg.c0_tim);
+  memcpy(LimeCfg.c1_tim, c1_tim, 4 * sizeof *LimeCfg.c1_tim);
+  memcpy(LimeCfg.c2_tim, c2_tim, 4 * sizeof *LimeCfg.c2_tim);
+  memcpy(LimeCfg.c3_tim, c3_tim, 4 * sizeof *LimeCfg.c3_tim);
+  memcpy(LimeCfg.c0_synth, c0_synth, 5 * sizeof *LimeCfg.c0_synth);
+  memcpy(LimeCfg.c1_synth, c1_synth, 5 * sizeof *LimeCfg.c1_synth);
+  memcpy(LimeCfg.c2_synth, c2_synth, 5 * sizeof *LimeCfg.c2_synth);
+  memcpy(LimeCfg.c3_synth, c3_synth, 5 * sizeof *LimeCfg.c3_synth);
 
   // and add the timestamp for the file
   auto now = std::chrono::system_clock::now();
   auto itt = std::chrono::system_clock::to_time_t(now);
   stringstream << std::put_time(localtime(&itt), "%G%m%d_%H%M%S");
-  LimeCfg->file_stamp = stringstream.str();
-  LimeCfg->stamp_start = stringstream.str();
-  LimeCfg->stamp_end =
+  LimeCfg.file_stamp = stringstream.str();
+  LimeCfg.stamp_start = stringstream.str();
+  LimeCfg.stamp_end =
       stringstream.str(); // will be overwritten just before data is written
 
   // allocate other variables that depend on Npulses
-  LimeCfg->p_dur_smp = new int[LimeCfg->Npulses];
-  LimeCfg->p_frq_smp = new double[LimeCfg->Npulses];
+  LimeCfg.p_dur_smp = new int[LimeCfg.Npulses];
+  LimeCfg.p_frq_smp = new double[LimeCfg.Npulses];
+
+  return LimeCfg;
 }
+
 
 
 int main(int argc, char **argv) {
   const double pi = acos(-1);
-
-  LimeConfig_t LimeCfg;
 
   std::ostringstream stringstream;
 
@@ -443,7 +448,7 @@ int main(int argc, char **argv) {
   }
 
   // Initialize the LimeConfig_t struct
-  initializeLimeConfig(&LimeCfg, Npulses, stringstream);
+    LimeConfig_t LimeCfg = initializeLimeConfig(Npulses, stringstream);
 
   // LimeCfg as attributes for writing to HDF and for parsing command line input
   // This is all done 'manually', since there is no reflection in cpp.. at least
