@@ -40,8 +40,8 @@ class limr:
         in_arg = json.loads(p.stdout.read().decode("utf-8"))
 
         # initialize the parameters
-        for key in in_arg:
-            setattr(self, key, in_arg[key][0])
+        for key, value in in_arg.items():
+            setattr(self, key, value)
 
         # initialize other variables
         self.parvar = {}

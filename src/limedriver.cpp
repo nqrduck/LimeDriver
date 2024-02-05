@@ -265,7 +265,7 @@ void dumpConfig(Config2HDFattr_t *config, size_t size) {
 
   int ii_oupargs = 0; // TODO: Better name
 
-  std::cout << "[" << std::endl;
+  std::cout << "{" << std::endl;
 
   for (size_t i = 0; i < size; ++i) {
 
@@ -280,7 +280,7 @@ void dumpConfig(Config2HDFattr_t *config, size_t size) {
 
     // Turn argument-value pairs to JSON objects
 
-    std::cout << "{\"" << arg << "\": \"";
+    std::cout << "\"" << arg << "\": \"";
 
     // Need to cast void* data pointer to the correct type
     // TODO: Do we lose precision here?
@@ -294,7 +294,7 @@ void dumpConfig(Config2HDFattr_t *config, size_t size) {
       std::cout << static_cast<char *>(config[i].Value);
     }
 
-    std::cout << "\"}";
+    std::cout << "\"";
 
     if (i < size - 1) {
       std::cout << ",";
@@ -303,7 +303,7 @@ void dumpConfig(Config2HDFattr_t *config, size_t size) {
     std::cout << std::endl;
   }
 
-  std::cout << "]" << std::endl;
+  std::cout << "}" << std::endl;
 }
 
 int main(int argc, char **argv) {
