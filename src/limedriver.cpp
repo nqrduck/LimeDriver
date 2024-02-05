@@ -278,16 +278,6 @@ void dumpConfig(Config2HDFattr_t *config, size_t size) {
       ii_oupargs++;
     }
 
-    /*
-    
-    string arg;
-    H5std_string Name;
-    H5::DataType dType;
-    void *Value;
-    hsize_t dim;
-
-    */
-
     // Turn arguments to JSON objects
 
     std::cout << "\"" << arg << "\": {";
