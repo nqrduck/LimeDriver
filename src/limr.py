@@ -20,6 +20,7 @@ import datetime  # to generate timestamps for parsweeps
 import h5py  # to have organized data storage.....
 import numpy as np  # ...
 import matplotlib.pyplot as plt
+import pathlib
 import json
 
 
@@ -265,18 +266,14 @@ class limr:
 
         self.HDF.load(self.HDFfile)
 
-    # helper functoin to guess the savepath from the file. This should not be called, since it should be obtained from the output of the program call
+    # helper function to guess the savepath from the file. This should not be called, since it should be obtained from the output of the program call        
     def __guess_savepath(self):
-        savepath = getattr(self, "spt")
-        if savepath == []:
-            savepath = "./asdf/"  # not recommended here: knowledge about the standard directory in the cpp file.... could be parsed, but user will usually provide a folder to limr.spt
-        if savepath[-1] != "/":
-            savepath += "/"  # and that little fix since users seldomly put the '/' for the directory...
-        savepath = savepath + getattr(self, "fst") + "_" + getattr(self, "fpa") + ".h5"
-        return savepath
-
-    # run for one single constellation
-    def __run_single(self, oup=True):
+        savepath = pathlib.Path(getattr(self,'spt'))
+        savepath = savepath / (getattr(self,'fst') + '_' + getattr(self,'fpa') + '.h5')
+        return str(savepath)
+    
+    # run for one single constellation         
+    def __run_single(self, oup = True):
         terminated = False
 
         while terminated == False:

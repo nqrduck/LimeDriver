@@ -401,7 +401,7 @@ int main(int argc, char **argv) {
   LimeCfg.pcyc_bef_avg = 0;      // phase cycle before average
 
   LimeCfg.file_pattern = "test"; // identifier when saving the file
-  LimeCfg.save_path = "./asdf/"; // path to save the file to
+  LimeCfg.save_path = "./data/"; // path to save the file to
   LimeCfg.override_save = 0;     // default: save data
 
   // that's it for the parameters
