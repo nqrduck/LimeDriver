@@ -9,23 +9,11 @@ LimeSuite
 HDF5 library
 
 compilation:
-g++ pulseN_USB.cpp -std=c++11 -lLimeSuite -o pulseN_USB
--I/usr/include/hdf5/serial -D_LARGEFILE64_SOURCE -D_LARGEFILE_SOURCE -Wdate-time
--D_FORTIFY_SOURCE=2 -g -O2 -fstack-protector-strong -Wformat
--Werror=format-security -L/usr/lib/x86_64-linux-gnu/hdf5/serial
-/usr/lib/x86_64-linux-gnu/hdf5/serial/libhdf5_hl_cpp.a
-/usr/lib/x86_64-linux-gnu/hdf5/serial/libhdf5_cpp.a
-/usr/lib/x86_64-linux-gnu/hdf5/serial/libhdf5_hl.a
-/usr/lib/x86_64-linux-gnu/hdf5/serial/libhdf5.a -Wl,-Bsymbolic-functions
--Wl,-z,relro -lpthread -lsz -lz -ldl -lm -Wl,-rpath
--Wl,/usr/lib/x86_64-linux-gnu/hdf5/serial
-
-Installation note: this compilation line looks terrifyingly long.. The reason is
-the inclusion of the HDF5 library, which is responsible for all the arguments
-after the -o specification. All this arguments can actually be retrieved from
-the command: h5c++ -show
+g++ pulseN_USB.cpp -std=c++11 $(pkg-config --cflags --libs LimeSuite) -o pulseN_USB \
+$(h5c++ -show)
 
  */
+ 
 #include "H5Cpp.h"
 #include "lime/LimeSuite.h"
 #include <chrono>
