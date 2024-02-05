@@ -27,6 +27,7 @@ $(h5c++ -show) limedriver.cpp -std=c++11 $(pkg-config --cflags --libs LimeSuite)
 #include <string.h>
 
 #include <errno.h>    // errno, ENOENT, EEXIST
+#include <string>
 #include <sys/stat.h> // stat
 #include <sys/types.h>
 #if defined(_WIN32)
@@ -261,9 +262,25 @@ void dumpConfig(Config2HDFattr_t *config, size_t size) {
   @param size: Size of the array
 
   */
+
+  int ii_oupargs = 0; // TODO: Better name
+
   std::cout << "[" << std::endl;
+
   for (size_t i = 0; i < size; ++i) {
-    std::cout << "{\"" << config[i].arg << "\": \"";
+
+    // Handle the "///" arguments
+
+    string arg = config[i].arg;
+
+    if (strcmp(config[i].arg.c_str(), "///") == 0) {
+      arg = "//" + std::to_string(ii_oupargs);
+      ii_oupargs++;
+    }
+
+    // Turn argument-value pairs to JSON objects
+
+    std::cout << "{\"" << arg << "\": \"";
 
     // Need to cast void* data pointer to the correct type
     // TODO: Do we lose precision here?
