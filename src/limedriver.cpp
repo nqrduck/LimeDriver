@@ -278,9 +278,23 @@ void dumpConfig(Config2HDFattr_t *config, size_t size) {
       ii_oupargs++;
     }
 
-    // Turn argument-value pairs to JSON objects
+    /*
+    
+    string arg;
+    H5std_string Name;
+    H5::DataType dType;
+    void *Value;
+    hsize_t dim;
 
-    std::cout << "\"" << arg << "\": \"";
+    */
+
+    // Turn arguments to JSON objects
+
+    std::cout << "\"" << arg << "\": {";
+
+    std::cout << "\"name\": \"" << config[i].Name << "\", ";
+    std::cout << "\"type\": \"" << typeid(config[i]).name() << "\", ";
+    std::cout << "\"value\": \"";
 
     // Need to cast void* data pointer to the correct type
     // TODO: Do we lose precision here?
@@ -294,7 +308,11 @@ void dumpConfig(Config2HDFattr_t *config, size_t size) {
       std::cout << static_cast<char *>(config[i].Value);
     }
 
-    std::cout << "\"";
+    std::cout << "\", ";
+
+    std::cout << "\"dim\": " << config[i].dim;
+
+    std::cout << "}";
 
     if (i < size - 1) {
       std::cout << ",";
