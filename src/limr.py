@@ -56,10 +56,10 @@ class limr:
 
     # print the arguments that have been set
     def print_params(self, allel=False):
-        for key in sorted(self.parsinp):
+        for key in sorted(self.parsinp.keys()):
             val = getattr(self, key)
             if (val != []) | (allel):
-                print("{:<5}: {:>50}    {:<25}".format(key, val, self.parsinp[key][1]))
+                print("{:<5}: {:>50}    {:<25}".format(key, val, self.parsinp[key]))
 
     # add parameter variation:
     # key is the argument to vary
@@ -282,7 +282,7 @@ class limr:
 
             str2call = self.Cprog
 
-            for key in self.parsinp:
+            for key in self.parsinp.keys():
                 vals = getattr(self, key)
                 if vals == []:
                     continue  # ignore arguments that are not set
