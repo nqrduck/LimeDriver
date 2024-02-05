@@ -15,7 +15,6 @@ config.h
 config.h.in
 config.status
 autom4te.cache/
-Makefile.in
 Makefile
 *.m4
 *.autosave
