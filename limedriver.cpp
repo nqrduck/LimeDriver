@@ -9,7 +9,7 @@ LimeSuite
 HDF5 library
 
 compilation:
-g++ pulseN_USB.cpp -std=c++11 $(pkg-config --cflags --libs LimeSuite) -o pulseN_USB \
+g++ limedriver.cpp -std=c++11 $(pkg-config --cflags --libs LimeSuite) -o pulseN_USB \
 $(h5c++ -show)
 
  */
