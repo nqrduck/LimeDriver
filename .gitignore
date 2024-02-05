@@ -4,7 +4,7 @@
 *.lo
 
 # Linked and compiled binary files (executables)
-pulseN_USB
+bin/
 *.so
 *.a
 *.out
