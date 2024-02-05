@@ -43,6 +43,8 @@ class limr:
         for key, value in in_arg.items():
             setattr(self, key, value)
 
+        self.parsinp = in_arg # TODO: *Either* store the parameters in a dict or as attributes, not both
+
         # initialize other variables
         self.parvar = {}
         self.parvar_cpl = {}
