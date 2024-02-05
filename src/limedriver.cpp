@@ -9,13 +9,15 @@ LimeSuite
 HDF5 library
 
 compilation:
-$(h5c++ -show) limedriver.cpp -std=c++11 $(pkg-config --cflags --libs LimeSuite) -o limedriver
+$(h5c++ -show) limedriver.cpp -std=c++11 $(pkg-config --cflags --libs LimeSuite)
+-o limedriver
 
  */
- 
+
 #include "H5Cpp.h"
 #include "lime/LimeSuite.h"
 #include <chrono>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -25,6 +27,7 @@ $(h5c++ -show) limedriver.cpp -std=c++11 $(pkg-config --cflags --libs LimeSuite)
 #include <string.h>
 
 #include <errno.h>    // errno, ENOENT, EEXIST
+#include <string>
 #include <sys/stat.h> // stat
 #include <sys/types.h>
 #if defined(_WIN32)
@@ -252,6 +255,75 @@ int GetGainRXTX(int *RXgain, int *TXgain) {
   return 0;
 }
 
+void dumpConfig(Config2HDFattr_t *config, size_t size) {
+  /* Dump the configuration to stdout in JSON format
+
+  @param config: Array of Config2HDFattr_t
+  @param size: Size of the array
+
+  */
+
+  int ii_oupargs = 0; // TODO: Better name
+
+  std::cout << "{" << std::endl;
+
+  for (size_t i = 0; i < size; ++i) {
+
+    // Handle the "///" arguments
+
+    string arg = config[i].arg;
+
+    if (strcmp(config[i].arg.c_str(), "///") == 0) {
+      arg = "//" + std::to_string(ii_oupargs);
+      ii_oupargs++;
+    }
+
+    /*
+    
+    string arg;
+    H5std_string Name;
+    H5::DataType dType;
+    void *Value;
+    hsize_t dim;
+
+    */
+
+    // Turn arguments to JSON objects
+
+    std::cout << "\"" << arg << "\": {";
+
+    std::cout << "\"name\": \"" << config[i].Name << "\", ";
+    std::cout << "\"type\": \"" << typeid(config[i]).name() << "\", ";
+    std::cout << "\"value\": \"";
+
+    // Need to cast void* data pointer to the correct type
+    // TODO: Do we lose precision here?
+    if (config[i].dType == H5::PredType::NATIVE_INT) {
+      std::cout << *(static_cast<int *>(config[i].Value));
+    } else if (config[i].dType == H5::PredType::IEEE_F32LE) {
+      std::cout << *(static_cast<float *>(config[i].Value));
+    } else if (config[i].dType == H5::PredType::IEEE_F64LE) {
+      std::cout << *(static_cast<double *>(config[i].Value));
+    } else {
+      std::cout << static_cast<char *>(config[i].Value);
+    }
+
+    std::cout << "\", ";
+
+    std::cout << "\"dim\": " << config[i].dim;
+
+    std::cout << "}";
+
+    if (i < size - 1) {
+      std::cout << ",";
+    }
+
+    std::cout << std::endl;
+  }
+
+  std::cout << "}" << std::endl;
+}
+
 int main(int argc, char **argv) {
   const double pi = acos(-1);
 
@@ -466,6 +538,21 @@ int main(int argc, char **argv) {
        H5::StrType(H5::PredType::C_S1, LimeCfg.stamp_end.length() + 1),
        (void *)LimeCfg.stamp_end.c_str(), 1}};
   int no_of_attr = sizeof(HDFattr) / sizeof(Config2HDFattr_t);
+
+  bool dumpFlag = false;
+
+  // Checking for dump flag
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--dump") == 0) {
+      dumpFlag = true;
+    }
+  }
+
+  // If dump flag is set, dump the config and exit
+  if (dumpFlag) {
+    dumpConfig(HDFattr, no_of_attr);
+    std::exit(0);
+  }
 
   // iterate through arguments to parse eventual user input
   // (exposing the actual content of the struct to python would be nicer...)
@@ -1112,8 +1199,8 @@ int main(int argc, char **argv) {
        << " excitation buffers is required to fit the experiment" << endl;
 
   // TX buffers
-  // int16_t tx_buffer[num_phavar][exc_buffers][2*buffersize];  	// buffer to
-  // hold complex values (2* samples), including phase cycles
+  // int16_t tx_buffer[num_phavar][exc_buffers][2*buffersize];  	//
+  // buffer to hold complex values (2* samples), including phase cycles
   // TODO: put in the same way as the acq buffer, i.e. as an array of pointers.
   // Otherwise, there is a limitation in space that can be used
   int16_t *tx_buffer[num_phavar][exc_buffers];
