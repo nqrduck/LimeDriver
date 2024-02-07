@@ -13,7 +13,6 @@ $(h5c++ -show) limedriver.cpp -std=c++11 $(pkg-config --cflags --libs LimeSuite)
 -o limedriver
 
  */
-
 #include "H5Cpp.h"
 #include "lime/LimeSuite.h"
 #include <chrono>
@@ -21,6 +20,7 @@ $(h5c++ -show) limedriver.cpp -std=c++11 $(pkg-config --cflags --libs LimeSuite)
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <list>
 #include <math.h>
 #include <sstream>
 #include <stdio.h>
@@ -51,6 +51,12 @@ struct LimeConfig_t {
   int TX_gain;
   int TX_IcorrDC;
   int TX_QcorrDC;
+  int TX_IcorrGain;
+  int TX_QcorrGain;
+  int TX_IQcorrPhase;
+  int RX_IcorrGain;
+  int RX_QcorrGain;
+  int RX_IQcorrPhase;
   int RX_gain_rback[4];
   int TX_gain_rback[3];
 
@@ -64,6 +70,16 @@ struct LimeConfig_t {
   double *p_pha;
   int *p_phacyc_N;
   int *p_phacyc_lev;
+  double *am_frq;
+  double *am_pha;
+  double *am_depth;
+  int *am_mode;
+  double *am_frq_smp;
+  double *fm_frq;
+  double *fm_pha;
+  double *fm_width;
+  int *fm_mode;
+  double *fm_frq_smp;
 
   int *p_c0_en;
   int *p_c1_en;
@@ -82,7 +98,7 @@ struct LimeConfig_t {
 
   int averages;
   int repetitions;
-  bool pcyc_bef_avg;
+  int pcyc_bef_avg;
   double reptime_secs;
   double rectime_secs;
   int reptime_smps;
@@ -93,6 +109,7 @@ struct LimeConfig_t {
   string file_stamp;
   string save_path;
   int override_save;
+  int override_init;
 
   string stamp_start;
   string stamp_end;
@@ -529,6 +546,40 @@ LimeConfig_t initializeLimeConfig(int Npulses,
   return LimeCfg;
 }
 
+// Modulation function for AM/FM using different modes, i.e. sinusoidal (mode =
+// 0), triangular (mode = 1), square (mode = 2)
+double Modfunction(double argument, int mode) {
+
+  const double pi = acos(-1);
+  double P;
+
+  double retval;
+  switch (mode) {
+  case 0: { // sinusoidal
+    retval = cos(argument);
+    break;
+  }
+  case 1: { // triangular
+
+    // A = 2.0; P = np.pi
+    // y = (A/P) * (P - abs(np.mod(x+np.pi/2,2*P)-P)) - A/2
+    P = pi / 2;
+    retval = (2.0 / P) * (P - fabs(fmod(argument + pi / 2, 2 * P) - P)) - 1.0;
+    break;
+  }
+  case 2: { // square
+    retval = (fmod(argument, 2 * pi) < pi) ? 1.0 : -1.0;
+    break;
+  }
+  default: {
+    retval = 1.0;
+    break;
+  }
+  }
+
+  return retval;
+}
+
 int main(int argc, char **argv) {
   const double pi = acos(-1);
 
@@ -880,13 +931,13 @@ int main(int argc, char **argv) {
       error();
 
     /*
-    // read back DC offset in TxTSP
-    if (LMS_ReadParam(device, LMS7_DCCORRI_TXTSP, &DC_I) != 0) error();
-    if (LMS_ReadParam(device, LMS7_DCCORRQ_TXTSP, &DC_Q) != 0) error();
-    if (LMS_ReadParam(device, LMS7_DC_BYP_TXTSP, &DC_EN) != 0) error();
-    cout << "TxTSP DC corr (EN, I, Q): " << DC_EN << ", " << DC_I << ", " <<
-    DC_Q << endl;
-    */
+// read back DC offset in TxTSP
+if (LMS_ReadParam(device, LMS7_DCCORRI_TXTSP, &DC_I) != 0) error();
+if (LMS_ReadParam(device, LMS7_DCCORRQ_TXTSP, &DC_Q) != 0) error();
+if (LMS_ReadParam(device, LMS7_DC_BYP_TXTSP, &DC_EN) != 0) error();
+cout << "TxTSP DC corr (EN, I, Q): " << DC_EN << ", " << DC_I << ", " <<
+DC_Q << endl;
+*/
 
     // print available antennae names
     // select antenna port
@@ -1597,9 +1648,9 @@ int main(int argc, char **argv) {
   }
 
   /*
-          // Check for the TX buffer and keep it filled
-          LMS_GetStreamStatus(tx_streams, &status); //Obtain TX stream stats
-          if (status.fifoFilledCount != 0) cout << TXFIFO_slots <<" TXFIFO slots
+  // Check for the TX buffer and keep it filled
+  LMS_GetStreamStatus(tx_streams, &status); //Obtain TX stream stats
+  if (status.fifoFilledCount != 0) cout << TXFIFO_slots <<" TXFIFO slots
      free before start: " << status.fifoFilledCount << " samples of " <<
      status.fifoSize << " with HW stamp " << status.timestamp <<" at RX
      timestamp" << rx_metadata.timestamp << endl;
@@ -1634,34 +1685,34 @@ int main(int argc, char **argv) {
       // in the case of gap-free acquisition, that has usually a timestamp
       // offset)
       if (acquiring == false) {
-        acqbuf_pos = acqbuf[ii_rep * num_phavar + ii_pcyc];
-        samples2Acquire = rec_len;
+          acqbuf_pos = acqbuf[ii_rep * num_phavar + ii_pcyc];
+          samples2Acquire = rec_len;
       } else {
         delayedacqbuf_pos = acqbuf[ii_rep * num_phavar + ii_pcyc];
         delayedAcqbufFwd = true;
       }
       acquiring = true;
 
-      // advance counters
-      if (LimeCfg.pcyc_bef_avg > 0) {
-        ii_pcyc++;
-        if (ii_pcyc == num_phavar) {
-          ii_pcyc = 0;
-          ii_avg++;
-          if (ii_avg == LimeCfg.averages) {
-            ii_avg = 0;
-            ii_rep++;
-          }
-        }
-      } else {
-        ii_avg++;
-        if (ii_avg == LimeCfg.averages) {
-          ii_avg = 0;
+        // advance counters
+        if (LimeCfg.pcyc_bef_avg > 0) {
           ii_pcyc++;
           if (ii_pcyc == num_phavar) {
             ii_pcyc = 0;
-            ii_rep++;
+            ii_avg++;
+            if (ii_avg == LimeCfg.averages) {
+              ii_avg = 0;
+              ii_rep++;
+            }
           }
+        } else {
+          ii_avg++;
+          if (ii_avg == LimeCfg.averages) {
+            ii_avg = 0;
+            ii_pcyc++;
+            if (ii_pcyc == num_phavar) {
+              ii_pcyc = 0;
+              ii_rep++;
+            }
         }
       }
 
@@ -1675,7 +1726,7 @@ int main(int argc, char **argv) {
       // small rectime_secs)
       if (timestampOffset < 0) {
         cout << "Next acq: rep " << ii_rep << ", avg " << ii_avg << ", pcyc "
-             << ii_pcyc << " : sched/act tstamp: " << next_RXtimestamp << ", "
+        << ii_pcyc << " : sched/act tstamp: " << next_RXtimestamp << ", "
              << rx_metadata.timestamp
              << "   Diff to last: " << next_RXtimestamp - last_RXtimestamp
              << " Offset: "
@@ -1691,7 +1742,7 @@ int main(int argc, char **argv) {
     }
     acquire = true;
 
-    // copy RX data into acquisition buffer
+        // copy RX data into acquisition buffer
     if (acquiring) {
 
       // standard case: copy everything, without offset
@@ -1713,7 +1764,7 @@ int main(int argc, char **argv) {
 
       // advance position in acquisition buffer
       acqbuf_pos += 2 * validSamples;
-
+      
       if (samples2Acquire == 0) {
         ii_acq++;
 
@@ -1781,8 +1832,8 @@ int main(int argc, char **argv) {
               ii_TXrep++;
               // in case the experiment is finished
               if (ii_TXrep == LimeCfg.repetitions)
-                ;
-              TXFIFO_slots = 0;
+;
+                TXFIFO_slots = 0;
             }
           }
         } else {
