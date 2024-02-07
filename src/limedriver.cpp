@@ -13,7 +13,6 @@ $(h5c++ -show) limedriver.cpp -std=c++11 $(pkg-config --cflags --libs LimeSuite)
 -o limedriver
 
  */
-
 #include "H5Cpp.h"
 #include "lime/LimeSuite.h"
 #include <chrono>
@@ -21,15 +20,17 @@ $(h5c++ -show) limedriver.cpp -std=c++11 $(pkg-config --cflags --libs LimeSuite)
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <list>
 #include <math.h>
 #include <sstream>
 #include <stdio.h>
 #include <string.h>
 
-#include <errno.h>    // errno, ENOENT, EEXIST
+#include <errno.h> // errno, ENOENT, EEXIST
 #include <string>
 #include <sys/stat.h> // stat
 #include <sys/types.h>
+#include <vector>
 #if defined(_WIN32)
 #include <direct.h> // _mkdir
 #endif
@@ -50,6 +51,12 @@ struct LimeConfig_t {
   int TX_gain;
   int TX_IcorrDC;
   int TX_QcorrDC;
+  int TX_IcorrGain;
+  int TX_QcorrGain;
+  int TX_IQcorrPhase;
+  int RX_IcorrGain;
+  int RX_QcorrGain;
+  int RX_IQcorrPhase;
   int RX_gain_rback[4];
   int TX_gain_rback[3];
 
@@ -63,6 +70,16 @@ struct LimeConfig_t {
   double *p_pha;
   int *p_phacyc_N;
   int *p_phacyc_lev;
+  double *am_frq;
+  double *am_pha;
+  double *am_depth;
+  int *am_mode;
+  double *am_frq_smp;
+  double *fm_frq;
+  double *fm_pha;
+  double *fm_width;
+  int *fm_mode;
+  double *fm_frq_smp;
 
   int *p_c0_en;
   int *p_c1_en;
@@ -81,7 +98,7 @@ struct LimeConfig_t {
 
   int averages;
   int repetitions;
-  bool pcyc_bef_avg;
+  int pcyc_bef_avg;
   double reptime_secs;
   double rectime_secs;
   int reptime_smps;
@@ -92,6 +109,7 @@ struct LimeConfig_t {
   string file_stamp;
   string save_path;
   int override_save;
+  int override_init;
 
   string stamp_start;
   string stamp_end;
@@ -255,205 +273,8 @@ int GetGainRXTX(int *RXgain, int *TXgain) {
   return 0;
 }
 
-void dumpConfig(Config2HDFattr_t *config, size_t size) {
-  /* Dump the configuration to stdout in JSON format
-
-  @param config: Array of Config2HDFattr_t
-  @param size: Size of the array
-
-  */
-
-  int ii_oupargs = 0; // TODO: Better name
-
-  std::cout << "{" << std::endl;
-
-  for (size_t i = 0; i < size; ++i) {
-
-    // Handle the "///" arguments
-
-    string arg = config[i].arg;
-
-    if (strcmp(config[i].arg.c_str(), "///") == 0) {
-      arg = "//" + std::to_string(ii_oupargs);
-      ii_oupargs++;
-    }
-
-    // Turn arguments to JSON objects
-
-    std::cout << "\"" << arg << "\": {";
-
-    std::cout << "\"name\": \"" << config[i].Name << "\", ";
-    std::cout << "\"type\": \"" << typeid(config[i]).name() << "\", ";
-    std::cout << "\"value\": \"";
-
-    // Need to cast void* data pointer to the correct type
-    // TODO: Do we lose precision here?
-    if (config[i].dType == H5::PredType::NATIVE_INT) {
-      std::cout << *(static_cast<int *>(config[i].Value));
-    } else if (config[i].dType == H5::PredType::IEEE_F32LE) {
-      std::cout << *(static_cast<float *>(config[i].Value));
-    } else if (config[i].dType == H5::PredType::IEEE_F64LE) {
-      std::cout << *(static_cast<double *>(config[i].Value));
-    } else {
-      std::cout << static_cast<char *>(config[i].Value);
-    }
-
-    std::cout << "\", ";
-
-    std::cout << "\"dim\": " << config[i].dim;
-
-    std::cout << "}";
-
-    if (i < size - 1) {
-      std::cout << ",";
-    }
-
-    std::cout << std::endl;
-  }
-
-  std::cout << "}" << std::endl;
-}
-
-LimeConfig_t initializeLimeConfig(int Npulses, std::ostringstream &stringstream) {
-  /* Initialize the LimeConfig_t struct
-
-  @param Npulses: Number of pulses
-  @param stringstream: std::ostringstream object
-
-  @return LimeConfig_t: LimeConfig_t struct with default values
-
-  */
-  LimeConfig_t LimeCfg;
-
-  LimeCfg.Npulses = Npulses;
-  
-  // Set all the DEFAULT parameters. Command line arguments allow for
-  // modification!
-
-  LimeCfg.srate = 30.72e6; // sample rate of the IF DAC/ADC
-  LimeCfg.frq = 50e6;      // LO carrier frequency
-  LimeCfg.RX_gain = 20;    // total gain of the receiver
-  LimeCfg.TX_gain = 30;    // total gain of the transmitter
-  LimeCfg.RX_LPF = 5e6;    // IF lowpass of the receiver
-  LimeCfg.TX_LPF = 130e6;  // IF lowpass of the transmitter
-
-  LimeCfg.TX_IcorrDC =
-      -32; // DC corr to TX mixer at IF (evaluate with LimeSuiteGUI)
-  LimeCfg.TX_QcorrDC = 50; // DC corr to TX mixer at IF
-
-  // Allocate the arrays with pulse parametes
-  LimeCfg.p_dur = new double[LimeCfg.Npulses]; // pulse duration (secs)
-  LimeCfg.p_offs = new int[LimeCfg.Npulses];   // pulse time offset
-  LimeCfg.p_amp = new double[LimeCfg.Npulses]; // pulse digital IF amplitude
-  LimeCfg.p_frq =
-      new double[LimeCfg.Npulses]; // pulse digital IF frequency (unit: Hz)
-  LimeCfg.p_pha = new double[LimeCfg.Npulses]; // pulse digital IF phase
-  LimeCfg.p_phacyc_N =
-      new int[LimeCfg.Npulses]; // number of pulse phases (cycled within 2*pi,
-                                // must be at least 1)
-  LimeCfg.p_phacyc_lev =
-      new int[LimeCfg.Npulses]; // stacking level of phase cycle (for eventual
-                                // coupling)
-  LimeCfg.p_c0_en = new int[LimeCfg.Npulses]; // pulse-wise enable of marker c0
-  LimeCfg.p_c1_en = new int[LimeCfg.Npulses]; // pulse-wise enable of marker c1
-  LimeCfg.p_c2_en = new int[LimeCfg.Npulses]; // pulse-wise enable of marker c2
-  LimeCfg.p_c3_en = new int[LimeCfg.Npulses]; // pulse-wise enable of marker c3
-
-  // and set standard values
-  for (int ii = 0; ii < LimeCfg.Npulses; ii++) {
-
-    LimeCfg.p_dur[ii] = 2e-6;
-    LimeCfg.p_offs[ii] =
-        (4080 * 3) /
-        (LimeCfg.Npulses + 1); // distribute them evenly within the buffer...
-    LimeCfg.p_amp[ii] = 1.0;
-    LimeCfg.p_frq[ii] = 4.0 / LimeCfg.p_dur[0];
-    LimeCfg.p_pha[ii] = 0.0;
-    LimeCfg.p_phacyc_N[ii] = 1;
-    LimeCfg.p_phacyc_lev[ii] = 0;
-    LimeCfg.p_c0_en[ii] = 1;
-    LimeCfg.p_c1_en[ii] = 1;
-    LimeCfg.p_c2_en[ii] = 1;
-    LimeCfg.p_c3_en[ii] = 1;
-  }
-
-  // Timing of TTL controls: [enabled? , pre, offs, post]
-  int c0_tim[4] = {0, 70, 56, -5};
-  int c1_tim[4] = {0, 70, 56, -5};
-  int c2_tim[4] = {0, 70, 56, -5};
-  int c3_tim[4] = {0, 70, 56, -5};
-
-  // Use TTL channel as synth: [enabled? , half-period, strt, PSK shift, PSK
-  // adv]
-  int c0_synth[5] = {0, 500, 0, 0, 0};
-  int c1_synth[5] = {0, 500, 0, 0, 0};
-  int c2_synth[5] = {0, 500, 0, 0, 0};
-  int c3_synth[5] = {0, 500, 0, 0, 0};
-
-  LimeCfg.averages = 6;          // number of averages
-  LimeCfg.repetitions = 4;       // number of repetions
-  LimeCfg.reptime_secs = 4e-3;   // repetition time
-  LimeCfg.rectime_secs = 0.2e-3; // duration of acquisition window
-  LimeCfg.buffersize = 4080 * 3; // number of samples in buffer
-  LimeCfg.pcyc_bef_avg = 0;      // phase cycle before average
-
-  LimeCfg.file_pattern = "test"; // identifier when saving the file
-  LimeCfg.save_path = "./data/"; // path to save the file to
-  LimeCfg.override_save = 0;     // default: save data
-
-    // that's it for the parameters
-  // ----------------------------------------------------------------------------------
-
-  // .. copy here those arrays ...
-  memcpy(LimeCfg.c0_tim, c0_tim, 4 * sizeof *LimeCfg.c0_tim);
-  memcpy(LimeCfg.c1_tim, c1_tim, 4 * sizeof *LimeCfg.c1_tim);
-  memcpy(LimeCfg.c2_tim, c2_tim, 4 * sizeof *LimeCfg.c2_tim);
-  memcpy(LimeCfg.c3_tim, c3_tim, 4 * sizeof *LimeCfg.c3_tim);
-  memcpy(LimeCfg.c0_synth, c0_synth, 5 * sizeof *LimeCfg.c0_synth);
-  memcpy(LimeCfg.c1_synth, c1_synth, 5 * sizeof *LimeCfg.c1_synth);
-  memcpy(LimeCfg.c2_synth, c2_synth, 5 * sizeof *LimeCfg.c2_synth);
-  memcpy(LimeCfg.c3_synth, c3_synth, 5 * sizeof *LimeCfg.c3_synth);
-
-  // and add the timestamp for the file
-  auto now = std::chrono::system_clock::now();
-  auto itt = std::chrono::system_clock::to_time_t(now);
-  stringstream << std::put_time(localtime(&itt), "%G%m%d_%H%M%S");
-  LimeCfg.file_stamp = stringstream.str();
-  LimeCfg.stamp_start = stringstream.str();
-  LimeCfg.stamp_end =
-      stringstream.str(); // will be overwritten just before data is written
-
-  // allocate other variables that depend on Npulses
-  LimeCfg.p_dur_smp = new int[LimeCfg.Npulses];
-  LimeCfg.p_frq_smp = new double[LimeCfg.Npulses];
-
-  return LimeCfg;
-}
-
-
-
-int main(int argc, char **argv) {
-  const double pi = acos(-1);
-
-  std::ostringstream stringstream;
-
-  int Npulses = 2; // default number of pulses
-  // check if nPulses has been given as argument, so that all the arrays are
-  // initialized with proper size
-  for (int ii_arg = 1; ii_arg < argc; ii_arg++) {
-    if (strcmp(argv[ii_arg], "-npu") == 0 && ii_arg + 1 < argc) {
-      Npulses = atoi(argv[ii_arg + 1]);
-      break;
-    }
-  }
-
-  // Initialize the LimeConfig_t struct
-    LimeConfig_t LimeCfg = initializeLimeConfig(Npulses, stringstream);
-
-  // LimeCfg as attributes for writing to HDF and for parsing command line input
-  // This is all done 'manually', since there is no reflection in cpp.. at least
-  // not by default
-  struct Config2HDFattr_t HDFattr[] = {
+std::vector<Config2HDFattr_t> getHDFAttributes(LimeConfig_t& LimeCfg) {
+  std::vector<Config2HDFattr_t> HDFattr = {
       {"sra", "SampleRate [Hz]", H5::PredType::IEEE_F32LE, &LimeCfg.srate, 1},
       {"lof", "LO Frequency [Hz]", H5::PredType::IEEE_F32LE, &LimeCfg.frq, 1},
       {"rlp", "RX LowPass BW [Hz]", H5::PredType::IEEE_F32LE, &LimeCfg.RX_LPF,
@@ -546,7 +367,244 @@ int main(int argc, char **argv) {
       {"///", "Exp End Timestamp",
        H5::StrType(H5::PredType::C_S1, LimeCfg.stamp_end.length() + 1),
        (void *)LimeCfg.stamp_end.c_str(), 1}};
-  int no_of_attr = sizeof(HDFattr) / sizeof(Config2HDFattr_t);
+  return HDFattr;
+}
+
+void dumpConfig(Config2HDFattr_t *config, size_t size) {
+  /* Dump the configuration to stdout in JSON format
+
+  @param config: Array of Config2HDFattr_t
+  @param size: Size of the array
+
+  */
+
+  int ii_oupargs = 0; // TODO: Better name
+
+  std::cout << "{" << std::endl;
+
+  for (size_t i = 0; i < size; ++i) {
+
+    // Handle the "///" arguments
+
+    string arg = config[i].arg;
+
+    if (strcmp(config[i].arg.c_str(), "///") == 0) {
+      arg = "//" + std::to_string(ii_oupargs);
+      ii_oupargs++;
+    }
+
+    // Turn arguments to JSON objects
+
+    std::cout << "\"" << arg << "\": {";
+
+    std::cout << "\"name\": \"" << config[i].Name << "\", ";
+    std::cout << "\"type\": \"" << typeid(config[i]).name() << "\", ";
+    std::cout << "\"value\": \"";
+
+    // Need to cast void* data pointer to the correct type
+    // TODO: Do we lose precision here?
+    if (config[i].dType == H5::PredType::NATIVE_INT) {
+      std::cout << *(static_cast<int *>(config[i].Value));
+    } else if (config[i].dType == H5::PredType::IEEE_F32LE) {
+      std::cout << *(static_cast<float *>(config[i].Value));
+    } else if (config[i].dType == H5::PredType::IEEE_F64LE) {
+      std::cout << *(static_cast<double *>(config[i].Value));
+    } else {
+      std::cout << static_cast<char *>(config[i].Value);
+    }
+
+    std::cout << "\", ";
+
+    std::cout << "\"dim\": " << config[i].dim;
+
+    std::cout << "}";
+
+    if (i < size - 1) {
+      std::cout << ",";
+    }
+
+    std::cout << std::endl;
+  }
+
+  std::cout << "}" << std::endl;
+}
+
+LimeConfig_t initializeLimeConfig(int Npulses,
+                                  std::ostringstream &stringstream) {
+  /* Initialize the LimeConfig_t struct
+
+  @param Npulses: Number of pulses
+  @param stringstream: std::ostringstream object
+
+  @return LimeConfig_t: LimeConfig_t struct with default values
+
+  */
+  LimeConfig_t LimeCfg{};
+
+  LimeCfg.Npulses = Npulses;
+
+  // Set all the DEFAULT parameters. Command line arguments allow for
+  // modification!
+
+  LimeCfg.srate = 30.72e6; // sample rate of the IF DAC/ADC
+  LimeCfg.frq = 50e6;      // LO carrier frequency
+  LimeCfg.RX_gain = 20;    // total gain of the receiver
+  LimeCfg.TX_gain = 30;    // total gain of the transmitter
+  LimeCfg.RX_LPF = 5e6;    // IF lowpass of the receiver
+  LimeCfg.TX_LPF = 130e6;  // IF lowpass of the transmitter
+
+  LimeCfg.TX_IcorrDC =
+      -32; // DC corr to TX mixer at IF (evaluate with LimeSuiteGUI)
+  LimeCfg.TX_QcorrDC = 50; // DC corr to TX mixer at IF
+
+  // Allocate the arrays with pulse parametes
+  LimeCfg.p_dur = new double[LimeCfg.Npulses]; // pulse duration (secs)
+  LimeCfg.p_offs = new int[LimeCfg.Npulses];   // pulse time offset
+  LimeCfg.p_amp = new double[LimeCfg.Npulses]; // pulse digital IF amplitude
+  LimeCfg.p_frq =
+      new double[LimeCfg.Npulses]; // pulse digital IF frequency (unit: Hz)
+  LimeCfg.p_pha = new double[LimeCfg.Npulses]; // pulse digital IF phase
+  LimeCfg.p_phacyc_N =
+      new int[LimeCfg.Npulses]; // number of pulse phases (cycled within 2*pi,
+                                // must be at least 1)
+  LimeCfg.p_phacyc_lev =
+      new int[LimeCfg.Npulses]; // stacking level of phase cycle (for eventual
+                                // coupling)
+  LimeCfg.p_c0_en = new int[LimeCfg.Npulses]; // pulse-wise enable of marker c0
+  LimeCfg.p_c1_en = new int[LimeCfg.Npulses]; // pulse-wise enable of marker c1
+  LimeCfg.p_c2_en = new int[LimeCfg.Npulses]; // pulse-wise enable of marker c2
+  LimeCfg.p_c3_en = new int[LimeCfg.Npulses]; // pulse-wise enable of marker c3
+
+  // and set standard values
+  for (int ii = 0; ii < LimeCfg.Npulses; ii++) {
+
+    LimeCfg.p_dur[ii] = 2e-6;
+    LimeCfg.p_offs[ii] =
+        (4080 * 3) /
+        (LimeCfg.Npulses + 1); // distribute them evenly within the buffer...
+    LimeCfg.p_amp[ii] = 1.0;
+    LimeCfg.p_frq[ii] = 4.0 / LimeCfg.p_dur[0];
+    LimeCfg.p_pha[ii] = 0.0;
+    LimeCfg.p_phacyc_N[ii] = 1;
+    LimeCfg.p_phacyc_lev[ii] = 0;
+    LimeCfg.p_c0_en[ii] = 1;
+    LimeCfg.p_c1_en[ii] = 1;
+    LimeCfg.p_c2_en[ii] = 1;
+    LimeCfg.p_c3_en[ii] = 1;
+  }
+
+  // Timing of TTL controls: [enabled? , pre, offs, post]
+  int c0_tim[4] = {0, 70, 56, -5};
+  int c1_tim[4] = {0, 70, 56, -5};
+  int c2_tim[4] = {0, 70, 56, -5};
+  int c3_tim[4] = {0, 70, 56, -5};
+
+  // Use TTL channel as synth: [enabled? , half-period, strt, PSK shift, PSK
+  // adv]
+  int c0_synth[5] = {0, 500, 0, 0, 0};
+  int c1_synth[5] = {0, 500, 0, 0, 0};
+  int c2_synth[5] = {0, 500, 0, 0, 0};
+  int c3_synth[5] = {0, 500, 0, 0, 0};
+
+  LimeCfg.averages = 6;          // number of averages
+  LimeCfg.repetitions = 4;       // number of repetions
+  LimeCfg.reptime_secs = 4e-3;   // repetition time
+  LimeCfg.rectime_secs = 0.2e-3; // duration of acquisition window
+  LimeCfg.buffersize = 4080 * 3; // number of samples in buffer
+  LimeCfg.pcyc_bef_avg = 0;      // phase cycle before average
+
+  LimeCfg.file_pattern = "test"; // identifier when saving the file
+  LimeCfg.save_path = "./data/"; // path to save the file to
+  LimeCfg.override_save = 0;     // default: save data
+
+  // that's it for the parameters
+  // ----------------------------------------------------------------------------------
+
+  // .. copy here those arrays ...
+  memcpy(LimeCfg.c0_tim, c0_tim, 4 * sizeof *LimeCfg.c0_tim);
+  memcpy(LimeCfg.c1_tim, c1_tim, 4 * sizeof *LimeCfg.c1_tim);
+  memcpy(LimeCfg.c2_tim, c2_tim, 4 * sizeof *LimeCfg.c2_tim);
+  memcpy(LimeCfg.c3_tim, c3_tim, 4 * sizeof *LimeCfg.c3_tim);
+  memcpy(LimeCfg.c0_synth, c0_synth, 5 * sizeof *LimeCfg.c0_synth);
+  memcpy(LimeCfg.c1_synth, c1_synth, 5 * sizeof *LimeCfg.c1_synth);
+  memcpy(LimeCfg.c2_synth, c2_synth, 5 * sizeof *LimeCfg.c2_synth);
+  memcpy(LimeCfg.c3_synth, c3_synth, 5 * sizeof *LimeCfg.c3_synth);
+
+  // and add the timestamp for the file
+  auto now = std::chrono::system_clock::now();
+  auto itt = std::chrono::system_clock::to_time_t(now);
+  stringstream << std::put_time(localtime(&itt), "%G%m%d_%H%M%S");
+  LimeCfg.file_stamp = stringstream.str();
+  LimeCfg.stamp_start = stringstream.str();
+  LimeCfg.stamp_end =
+      stringstream.str(); // will be overwritten just before data is written
+
+  // allocate other variables that depend on Npulses
+  LimeCfg.p_dur_smp = new int[LimeCfg.Npulses]{};
+  LimeCfg.p_frq_smp = new double[LimeCfg.Npulses]{};
+
+  return LimeCfg;
+}
+
+// Modulation function for AM/FM using different modes, i.e. sinusoidal (mode =
+// 0), triangular (mode = 1), square (mode = 2)
+double Modfunction(double argument, int mode) {
+
+  const double pi = acos(-1);
+  double P;
+
+  double retval;
+  switch (mode) {
+  case 0: { // sinusoidal
+    retval = cos(argument);
+    break;
+  }
+  case 1: { // triangular
+
+    // A = 2.0; P = np.pi
+    // y = (A/P) * (P - abs(np.mod(x+np.pi/2,2*P)-P)) - A/2
+    P = pi / 2;
+    retval = (2.0 / P) * (P - fabs(fmod(argument + pi / 2, 2 * P) - P)) - 1.0;
+    break;
+  }
+  case 2: { // square
+    retval = (fmod(argument, 2 * pi) < pi) ? 1.0 : -1.0;
+    break;
+  }
+  default: {
+    retval = 1.0;
+    break;
+  }
+  }
+
+  return retval;
+}
+
+int main(int argc, char **argv) {
+  const double pi = acos(-1);
+
+  std::ostringstream stringstream;
+
+  int Npulses = 2; // default number of pulses
+  // check if nPulses has been given as argument, so that all the arrays are
+  // initialized with proper size
+  for (int ii_arg = 1; ii_arg < argc; ii_arg++) {
+    if (strcmp(argv[ii_arg], "-npu") == 0 && ii_arg + 1 < argc) {
+      Npulses = atoi(argv[ii_arg + 1]);
+      break;
+    }
+  }
+
+  // Initialize the LimeConfig_t struct
+  LimeConfig_t LimeCfg = initializeLimeConfig(Npulses, stringstream);
+
+  // Getting HDF Attributes from dedicated function
+  std::vector<Config2HDFattr_t> HDFattrVector = getHDFAttributes(LimeCfg);
+  size_t no_of_attr = HDFattrVector.size();
+
+  // Converting to array to maintain compatibility with older code
+  Config2HDFattr_t HDFattr[no_of_attr];
+  std::copy(HDFattrVector.begin(), HDFattrVector.end(), HDFattr);
 
   bool dumpFlag = false;
 
@@ -873,13 +931,13 @@ int main(int argc, char **argv) {
       error();
 
     /*
-    // read back DC offset in TxTSP
-    if (LMS_ReadParam(device, LMS7_DCCORRI_TXTSP, &DC_I) != 0) error();
-    if (LMS_ReadParam(device, LMS7_DCCORRQ_TXTSP, &DC_Q) != 0) error();
-    if (LMS_ReadParam(device, LMS7_DC_BYP_TXTSP, &DC_EN) != 0) error();
-    cout << "TxTSP DC corr (EN, I, Q): " << DC_EN << ", " << DC_I << ", " <<
-    DC_Q << endl;
-    */
+// read back DC offset in TxTSP
+if (LMS_ReadParam(device, LMS7_DCCORRI_TXTSP, &DC_I) != 0) error();
+if (LMS_ReadParam(device, LMS7_DCCORRQ_TXTSP, &DC_Q) != 0) error();
+if (LMS_ReadParam(device, LMS7_DC_BYP_TXTSP, &DC_EN) != 0) error();
+cout << "TxTSP DC corr (EN, I, Q): " << DC_EN << ", " << DC_I << ", " <<
+DC_Q << endl;
+*/
 
     // print available antennae names
     // select antenna port
@@ -1590,9 +1648,9 @@ int main(int argc, char **argv) {
   }
 
   /*
-          // Check for the TX buffer and keep it filled
-          LMS_GetStreamStatus(tx_streams, &status); //Obtain TX stream stats
-          if (status.fifoFilledCount != 0) cout << TXFIFO_slots <<" TXFIFO slots
+  // Check for the TX buffer and keep it filled
+  LMS_GetStreamStatus(tx_streams, &status); //Obtain TX stream stats
+  if (status.fifoFilledCount != 0) cout << TXFIFO_slots <<" TXFIFO slots
      free before start: " << status.fifoFilledCount << " samples of " <<
      status.fifoSize << " with HW stamp " << status.timestamp <<" at RX
      timestamp" << rx_metadata.timestamp << endl;
@@ -1627,34 +1685,34 @@ int main(int argc, char **argv) {
       // in the case of gap-free acquisition, that has usually a timestamp
       // offset)
       if (acquiring == false) {
-        acqbuf_pos = acqbuf[ii_rep * num_phavar + ii_pcyc];
-        samples2Acquire = rec_len;
+          acqbuf_pos = acqbuf[ii_rep * num_phavar + ii_pcyc];
+          samples2Acquire = rec_len;
       } else {
         delayedacqbuf_pos = acqbuf[ii_rep * num_phavar + ii_pcyc];
         delayedAcqbufFwd = true;
       }
       acquiring = true;
 
-      // advance counters
-      if (LimeCfg.pcyc_bef_avg > 0) {
-        ii_pcyc++;
-        if (ii_pcyc == num_phavar) {
-          ii_pcyc = 0;
-          ii_avg++;
-          if (ii_avg == LimeCfg.averages) {
-            ii_avg = 0;
-            ii_rep++;
-          }
-        }
-      } else {
-        ii_avg++;
-        if (ii_avg == LimeCfg.averages) {
-          ii_avg = 0;
+        // advance counters
+        if (LimeCfg.pcyc_bef_avg > 0) {
           ii_pcyc++;
           if (ii_pcyc == num_phavar) {
             ii_pcyc = 0;
-            ii_rep++;
+            ii_avg++;
+            if (ii_avg == LimeCfg.averages) {
+              ii_avg = 0;
+              ii_rep++;
+            }
           }
+        } else {
+          ii_avg++;
+          if (ii_avg == LimeCfg.averages) {
+            ii_avg = 0;
+            ii_pcyc++;
+            if (ii_pcyc == num_phavar) {
+              ii_pcyc = 0;
+              ii_rep++;
+            }
         }
       }
 
@@ -1668,7 +1726,7 @@ int main(int argc, char **argv) {
       // small rectime_secs)
       if (timestampOffset < 0) {
         cout << "Next acq: rep " << ii_rep << ", avg " << ii_avg << ", pcyc "
-             << ii_pcyc << " : sched/act tstamp: " << next_RXtimestamp << ", "
+        << ii_pcyc << " : sched/act tstamp: " << next_RXtimestamp << ", "
              << rx_metadata.timestamp
              << "   Diff to last: " << next_RXtimestamp - last_RXtimestamp
              << " Offset: "
@@ -1684,7 +1742,7 @@ int main(int argc, char **argv) {
     }
     acquire = true;
 
-    // copy RX data into acquisition buffer
+        // copy RX data into acquisition buffer
     if (acquiring) {
 
       // standard case: copy everything, without offset
@@ -1706,7 +1764,7 @@ int main(int argc, char **argv) {
 
       // advance position in acquisition buffer
       acqbuf_pos += 2 * validSamples;
-
+      
       if (samples2Acquire == 0) {
         ii_acq++;
 
@@ -1774,8 +1832,8 @@ int main(int argc, char **argv) {
               ii_TXrep++;
               // in case the experiment is finished
               if (ii_TXrep == LimeCfg.repetitions)
-                ;
-              TXFIFO_slots = 0;
+;
+                TXFIFO_slots = 0;
             }
           }
         } else {
