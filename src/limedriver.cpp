@@ -546,6 +546,178 @@ LimeConfig_t initializeLimeConfig(int Npulses,
   return LimeCfg;
 }
 
+int parseArguments(int argc, char **argv, LimeConfig_t &LimeCfg, std::vector<Config2HDFattr_t> &HDFattrVector) {
+  /* Parse command line arguments
+
+  @param argc: Number of arguments
+  @param argv: Array of arguments
+  @param LimeCfg: LimeConfig_t struct
+  @param HDFattr: HDFattr_t struct
+
+  @return int: 0 if successful, -1 if not
+
+  */
+
+ size_t no_of_attr = HDFattrVector.size();
+
+ // iterate through arguments to parse eventual user input
+  // (exposing the actual content of the struct to python would be nicer...)
+  bool parse_prob = false;
+  int curr_attr = -1;
+  int curr_attr_last = -1;
+  int attr2read = 0;
+  int attr2read_last = 0;
+  int attr_read = 0;
+  for (int ii_arg = 1; ii_arg < argc; ii_arg++) {
+
+    // get the attribute for the argument based on '-' (which also is there for
+    // negative numbers..)
+    if (argv[ii_arg][0] == '-') {
+
+      if ((strlen(argv[ii_arg] + 1) != 3) && (attr2read == 0)) {
+        cout << "Invalid argument " << ii_arg << ": " << argv[ii_arg] << endl;
+        parse_prob = true;
+        continue;
+      }
+      // find matching attribute
+      curr_attr_last = curr_attr;
+      attr2read_last = attr2read;
+      curr_attr = -1;
+      for (int ii_attr = 0; ii_attr < no_of_attr; ii_attr++) {
+        if (strcmp(argv[ii_arg] + 1, HDFattrVector[ii_attr].arg.c_str()) == 0) {
+          curr_attr = ii_attr;
+          attr2read = HDFattrVector[ii_attr].dim;
+          attr_read = 0;
+          cout << "Found argument " << HDFattrVector[curr_attr].arg << ": "
+               << HDFattrVector[curr_attr].Name << endl;
+        }
+      }
+      // found nothing
+      if (curr_attr == -1 && attr2read_last == 0) {
+        cout << "Could not find valid attribute for argument " << ii_arg << ": "
+             << argv[ii_arg] << endl;
+        parse_prob = true;
+        // found something, but did not read the previous arguments
+      } else if (curr_attr > -1 && attr2read_last > 0) {
+        cout << "Missing argument: " << attr2read_last
+             << " value missing for argument " << HDFattrVector[curr_attr_last].arg
+             << endl;
+        parse_prob = true;
+      }
+      // found nothing and did not read the previous arguments: a negative
+      // number
+      if (curr_attr == -1 && attr2read_last > 0) {
+        // restore the attribute and it as number
+        curr_attr = curr_attr_last;
+        attr2read = attr2read_last;
+      } else
+        // all other cases: jump to the next argument
+        continue;
+    }
+
+    // parse the value from the current attribute
+    if (curr_attr != -1 && attr2read != 0) {
+
+      // differentiate between the different types of input based on the
+      // H5::DataType float values
+      if (HDFattrVector[curr_attr].dType == H5::PredType::IEEE_F32LE) {
+        *((float *)HDFattrVector[curr_attr].Value + attr_read) = atof(argv[ii_arg]);
+        attr2read--;
+        attr_read++;
+        // cout << "Got value " << atof(argv[ii_arg]) << " from " <<
+        // argv[ii_arg] << endl;
+      }
+      // double values
+      if (HDFattrVector[curr_attr].dType == H5::PredType::IEEE_F64LE) {
+        *((double *)HDFattrVector[curr_attr].Value + attr_read) =
+            (double)atof(argv[ii_arg]);
+        attr2read--;
+        attr_read++;
+        // cout << "Got value " << (double) atof(argv[ii_arg]) << " from " <<
+        // argv[ii_arg] << endl;
+      }
+      // integer values
+      if (HDFattrVector[curr_attr].dType == H5::PredType::NATIVE_INT) {
+        *((int *)HDFattrVector[curr_attr].Value + attr_read) = atoi(argv[ii_arg]);
+        attr2read--;
+        attr_read++;
+        // cout << "Got value " << atoi(argv[ii_arg]) << " from " <<
+        // argv[ii_arg] << endl;
+      }
+      // strings: stored as std::string in LimeCfg and as Cstring in HDFattr..
+      // --> explicitly treat strings, these are anyhow just a few for file/path
+      // info
+      if (strcmp(HDFattrVector[curr_attr].arg.c_str(), "spt") == 0) {
+        LimeCfg.save_path = argv[ii_arg];
+        HDFattrVector[curr_attr].dType =
+            H5::StrType(H5::PredType::C_S1, LimeCfg.save_path.length() + 1);
+        HDFattrVector[curr_attr].Value = (void *)LimeCfg.save_path.c_str();
+        attr2read--;
+        attr_read++;
+      }
+      if (strcmp(HDFattrVector[curr_attr].arg.c_str(), "fpa") == 0) {
+        LimeCfg.file_pattern = argv[ii_arg];
+        HDFattrVector[curr_attr].dType =
+            H5::StrType(H5::PredType::C_S1, LimeCfg.file_pattern.length() + 1);
+        HDFattrVector[curr_attr].Value = (void *)LimeCfg.file_pattern.c_str();
+        attr2read--;
+        attr_read++;
+      }
+      if (strcmp(HDFattrVector[curr_attr].arg.c_str(), "fst") == 0) {
+        LimeCfg.file_stamp = argv[ii_arg];
+        HDFattrVector[curr_attr].dType =
+            H5::StrType(H5::PredType::C_S1, LimeCfg.file_stamp.length() + 1);
+        HDFattrVector[curr_attr].Value = (void *)LimeCfg.file_stamp.c_str();
+        attr2read--;
+        attr_read++;
+      }
+    } else if (attr2read == 0) {
+      cout << "Problem with argument " << HDFattrVector[curr_attr].arg
+           << ": There is an input that is not clear, probably one input more "
+              "than required! "
+           << endl;
+      parse_prob = true;
+    }
+  }
+  // check if the last argument had all the values
+  if (attr2read > 0) {
+    cout << "Missing argument: " << attr2read << " value missing for argument "
+         << HDFattrVector[curr_attr].arg << endl;
+    parse_prob = true;
+  }
+  if (parse_prob) {
+    cout << "Exiting due to problem with provided arguments! Valid arguments "
+            "are (exept -///, which cannot be set by the user):"
+         << endl;
+    string datatype;
+    for (int ii_attr = 0; ii_attr < no_of_attr; ii_attr++) {
+
+      // get the datatype
+      if (HDFattrVector[ii_attr].dType == H5::PredType::IEEE_F32LE)
+        datatype = "float";
+      else if (HDFattrVector[ii_attr].dType == H5::PredType::IEEE_F64LE)
+        datatype = "double";
+      else if (HDFattrVector[ii_attr].dType == H5::PredType::NATIVE_INT)
+        datatype = "int";
+      else
+        datatype = "string";
+      cout << "-" << HDFattrVector[ii_attr].arg << "   " << left << setw(30)
+           << HDFattrVector[ii_attr].Name << ": " << HDFattrVector[ii_attr].dim << "x "
+           << datatype << endl;
+    }
+    return 1;
+  }
+
+  // convert input in seconds/Hz to samples
+  for (int ii = 0; ii < LimeCfg.Npulses; ii++) {
+    LimeCfg.p_dur_smp[ii] = round(LimeCfg.p_dur[ii] * LimeCfg.srate);
+    LimeCfg.p_frq_smp[ii] = LimeCfg.p_frq[ii] / LimeCfg.srate;
+  }
+
+  return 0;
+
+}
+
 // Modulation function for AM/FM using different modes, i.e. sinusoidal (mode =
 // 0), triangular (mode = 1), square (mode = 2)
 double Modfunction(double argument, int mode) {
@@ -621,158 +793,10 @@ int main(int argc, char **argv) {
     std::exit(0);
   }
 
-  // iterate through arguments to parse eventual user input
-  // (exposing the actual content of the struct to python would be nicer...)
-  bool parse_prob = false;
-  int curr_attr = -1;
-  int curr_attr_last = -1;
-  int attr2read = 0;
-  int attr2read_last = 0;
-  int attr_read = 0;
-  for (int ii_arg = 1; ii_arg < argc; ii_arg++) {
-
-    // get the attribute for the argument based on '-' (which also is there for
-    // negative numbers..)
-    if (argv[ii_arg][0] == '-') {
-
-      if ((strlen(argv[ii_arg] + 1) != 3) && (attr2read == 0)) {
-        cout << "Invalid argument " << ii_arg << ": " << argv[ii_arg] << endl;
-        parse_prob = true;
-        continue;
-      }
-      // find matching attribute
-      curr_attr_last = curr_attr;
-      attr2read_last = attr2read;
-      curr_attr = -1;
-      for (int ii_attr = 0; ii_attr < no_of_attr; ii_attr++) {
-        if (strcmp(argv[ii_arg] + 1, HDFattr[ii_attr].arg.c_str()) == 0) {
-          curr_attr = ii_attr;
-          attr2read = HDFattr[ii_attr].dim;
-          attr_read = 0;
-          cout << "Found argument " << HDFattr[curr_attr].arg << ": "
-               << HDFattr[curr_attr].Name << endl;
-        }
-      }
-      // found nothing
-      if (curr_attr == -1 && attr2read_last == 0) {
-        cout << "Could not find valid attribute for argument " << ii_arg << ": "
-             << argv[ii_arg] << endl;
-        parse_prob = true;
-        // found something, but did not read the previous arguments
-      } else if (curr_attr > -1 && attr2read_last > 0) {
-        cout << "Missing argument: " << attr2read_last
-             << " value missing for argument " << HDFattr[curr_attr_last].arg
-             << endl;
-        parse_prob = true;
-      }
-      // found nothing and did not read the previous arguments: a negative
-      // number
-      if (curr_attr == -1 && attr2read_last > 0) {
-        // restore the attribute and it as number
-        curr_attr = curr_attr_last;
-        attr2read = attr2read_last;
-      } else
-        // all other cases: jump to the next argument
-        continue;
-    }
-
-    // parse the value from the current attribute
-    if (curr_attr != -1 && attr2read != 0) {
-
-      // differentiate between the different types of input based on the
-      // H5::DataType float values
-      if (HDFattr[curr_attr].dType == H5::PredType::IEEE_F32LE) {
-        *((float *)HDFattr[curr_attr].Value + attr_read) = atof(argv[ii_arg]);
-        attr2read--;
-        attr_read++;
-        // cout << "Got value " << atof(argv[ii_arg]) << " from " <<
-        // argv[ii_arg] << endl;
-      }
-      // double values
-      if (HDFattr[curr_attr].dType == H5::PredType::IEEE_F64LE) {
-        *((double *)HDFattr[curr_attr].Value + attr_read) =
-            (double)atof(argv[ii_arg]);
-        attr2read--;
-        attr_read++;
-        // cout << "Got value " << (double) atof(argv[ii_arg]) << " from " <<
-        // argv[ii_arg] << endl;
-      }
-      // integer values
-      if (HDFattr[curr_attr].dType == H5::PredType::NATIVE_INT) {
-        *((int *)HDFattr[curr_attr].Value + attr_read) = atoi(argv[ii_arg]);
-        attr2read--;
-        attr_read++;
-        // cout << "Got value " << atoi(argv[ii_arg]) << " from " <<
-        // argv[ii_arg] << endl;
-      }
-      // strings: stored as std::string in LimeCfg and as Cstring in HDFattr..
-      // --> explicitly treat strings, these are anyhow just a few for file/path
-      // info
-      if (strcmp(HDFattr[curr_attr].arg.c_str(), "spt") == 0) {
-        LimeCfg.save_path = argv[ii_arg];
-        HDFattr[curr_attr].dType =
-            H5::StrType(H5::PredType::C_S1, LimeCfg.save_path.length() + 1);
-        HDFattr[curr_attr].Value = (void *)LimeCfg.save_path.c_str();
-        attr2read--;
-        attr_read++;
-      }
-      if (strcmp(HDFattr[curr_attr].arg.c_str(), "fpa") == 0) {
-        LimeCfg.file_pattern = argv[ii_arg];
-        HDFattr[curr_attr].dType =
-            H5::StrType(H5::PredType::C_S1, LimeCfg.file_pattern.length() + 1);
-        HDFattr[curr_attr].Value = (void *)LimeCfg.file_pattern.c_str();
-        attr2read--;
-        attr_read++;
-      }
-      if (strcmp(HDFattr[curr_attr].arg.c_str(), "fst") == 0) {
-        LimeCfg.file_stamp = argv[ii_arg];
-        HDFattr[curr_attr].dType =
-            H5::StrType(H5::PredType::C_S1, LimeCfg.file_stamp.length() + 1);
-        HDFattr[curr_attr].Value = (void *)LimeCfg.file_stamp.c_str();
-        attr2read--;
-        attr_read++;
-      }
-    } else if (attr2read == 0) {
-      cout << "Problem with argument " << HDFattr[curr_attr].arg
-           << ": There is an input that is not clear, probably one input more "
-              "than required! "
-           << endl;
-      parse_prob = true;
-    }
-  }
-  // check if the last argument had all the values
-  if (attr2read > 0) {
-    cout << "Missing argument: " << attr2read << " value missing for argument "
-         << HDFattr[curr_attr].arg << endl;
-    parse_prob = true;
-  }
-  if (parse_prob) {
-    cout << "Exiting due to problem with provided arguments! Valid arguments "
-            "are (exept -///, which cannot be set by the user):"
-         << endl;
-    string datatype;
-    for (int ii_attr = 0; ii_attr < no_of_attr; ii_attr++) {
-
-      // get the datatype
-      if (HDFattr[ii_attr].dType == H5::PredType::IEEE_F32LE)
-        datatype = "float";
-      else if (HDFattr[ii_attr].dType == H5::PredType::IEEE_F64LE)
-        datatype = "double";
-      else if (HDFattr[ii_attr].dType == H5::PredType::NATIVE_INT)
-        datatype = "int";
-      else
-        datatype = "string";
-      cout << "-" << HDFattr[ii_attr].arg << "   " << left << setw(30)
-           << HDFattr[ii_attr].Name << ": " << HDFattr[ii_attr].dim << "x "
-           << datatype << endl;
-    }
+  
+  // Parse command line arguments
+  if (parseArguments(argc, argv, LimeCfg, HDFattrVector) != 0) {
     return 1;
-  }
-
-  // convert input in seconds/Hz to samples
-  for (int ii = 0; ii < LimeCfg.Npulses; ii++) {
-    LimeCfg.p_dur_smp[ii] = round(LimeCfg.p_dur[ii] * LimeCfg.srate);
-    LimeCfg.p_frq_smp[ii] = LimeCfg.p_frq[ii] / LimeCfg.srate;
   }
 
   // check directory first
@@ -781,6 +805,9 @@ int main(int argc, char **argv) {
          << endl;
     return 1;
   }
+
+  // Converting to array to maintain compatibility with older code and update
+  std::copy(HDFattrVector.begin(), HDFattrVector.end(), HDFattr);
 
   // Find devices
   int n;
