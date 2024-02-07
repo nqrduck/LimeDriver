@@ -273,7 +273,7 @@ int GetGainRXTX(int *RXgain, int *TXgain) {
   return 0;
 }
 
-std::vector<Config2HDFattr_t> getHDFAttributes(LimeConfig_t LimeCfg) {
+std::vector<Config2HDFattr_t> getHDFAttributes(LimeConfig_t& LimeCfg) {
   std::vector<Config2HDFattr_t> HDFattr = {
       {"sra", "SampleRate [Hz]", H5::PredType::IEEE_F32LE, &LimeCfg.srate, 1},
       {"lof", "LO Frequency [Hz]", H5::PredType::IEEE_F32LE, &LimeCfg.frq, 1},
@@ -439,7 +439,7 @@ LimeConfig_t initializeLimeConfig(int Npulses,
   @return LimeConfig_t: LimeConfig_t struct with default values
 
   */
-  LimeConfig_t LimeCfg;
+  LimeConfig_t LimeCfg{};
 
   LimeCfg.Npulses = Npulses;
 
@@ -540,8 +540,8 @@ LimeConfig_t initializeLimeConfig(int Npulses,
       stringstream.str(); // will be overwritten just before data is written
 
   // allocate other variables that depend on Npulses
-  LimeCfg.p_dur_smp = new int[LimeCfg.Npulses];
-  LimeCfg.p_frq_smp = new double[LimeCfg.Npulses];
+  LimeCfg.p_dur_smp = new int[LimeCfg.Npulses]{};
+  LimeCfg.p_frq_smp = new double[LimeCfg.Npulses]{};
 
   return LimeCfg;
 }
