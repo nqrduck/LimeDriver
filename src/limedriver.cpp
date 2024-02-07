@@ -16,6 +16,7 @@ $(h5c++ -show) limedriver.cpp -std=c++11 $(pkg-config --cflags --libs LimeSuite)
 #include "H5Cpp.h"
 #include "lime/LimeSuite.h"
 #include <chrono>
+#include <cstddef>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
@@ -370,13 +371,13 @@ std::vector<Config2HDFattr_t> getHDFAttributes(LimeConfig_t& LimeCfg) {
   return HDFattr;
 }
 
-void dumpConfig(Config2HDFattr_t *config, size_t size) {
+void dumpConfig(std::vector<Config2HDFattr_t> &config) {
   /* Dump the configuration to stdout in JSON format
 
   @param config: Array of Config2HDFattr_t
-  @param size: Size of the array
-
   */
+
+  size_t size = config.size();
 
   int ii_oupargs = 0; // TODO: Better name
 
@@ -774,10 +775,6 @@ int main(int argc, char **argv) {
   std::vector<Config2HDFattr_t> HDFattrVector = getHDFAttributes(LimeCfg);
   size_t no_of_attr = HDFattrVector.size();
 
-  // Converting to array to maintain compatibility with older code
-  Config2HDFattr_t HDFattr[no_of_attr];
-  std::copy(HDFattrVector.begin(), HDFattrVector.end(), HDFattr);
-
   bool dumpFlag = false;
 
   // Checking for dump flag
@@ -789,7 +786,7 @@ int main(int argc, char **argv) {
 
   // If dump flag is set, dump the config and exit
   if (dumpFlag) {
-    dumpConfig(HDFattr, no_of_attr);
+    dumpConfig(HDFattrVector);
     std::exit(0);
   }
 
@@ -806,7 +803,8 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // Converting to array to maintain compatibility with older code and update
+  // Converting to array to maintain compatibility with older code
+  Config2HDFattr_t HDFattr[no_of_attr];
   std::copy(HDFattrVector.begin(), HDFattrVector.end(), HDFattr);
 
   // Find devices
