@@ -447,6 +447,8 @@ LimeConfig_t initializeLimeConfig(int Npulses) {
   // allocate other variables that depend on Npulses
   LimeCfg.p_dur_smp = new int[LimeCfg.Npulses]{};
   LimeCfg.p_frq_smp = new double[LimeCfg.Npulses]{};
+  LimeCfg.am_frq_smp = 	new double[LimeCfg.Npulses];
+	LimeCfg.fm_frq_smp = 	new double[LimeCfg.Npulses];
 
   return LimeCfg;
 }
@@ -671,10 +673,12 @@ int run_experiment(LimeConfig_t LimeCfg, std::vector<Config2HDFattr_t> &HDFattrV
   std::copy(HDFattrVector.begin(), HDFattrVector.end(), HDFattr);
 
   // convert input in seconds/Hz to samples
-  for (int ii = 0; ii < LimeCfg.Npulses; ii++) {
-    LimeCfg.p_dur_smp[ii] = round(LimeCfg.p_dur[ii] * LimeCfg.srate);
-    LimeCfg.p_frq_smp[ii] = LimeCfg.p_frq[ii] / LimeCfg.srate;
-  }
+	for (int ii = 0; ii < LimeCfg.Npulses; ii++) {
+		LimeCfg.p_dur_smp[ii] = round(LimeCfg.p_dur[ii] * LimeCfg.srate);
+		LimeCfg.p_frq_smp[ii] = LimeCfg.p_frq[ii] / LimeCfg.srate;
+		LimeCfg.am_frq_smp[ii] = LimeCfg.am_frq[ii] / LimeCfg.srate;
+		LimeCfg.fm_frq_smp[ii] = LimeCfg.fm_frq[ii] / LimeCfg.srate;
+	}
 
  // check directory first
   if (makePath(LimeCfg.save_path) == 0) {
