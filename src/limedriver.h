@@ -112,6 +112,26 @@ struct Config2HDFattr_t {
 // Device structure, should be initialize to NULL
 static lms_device_t *device = NULL;
 
+/* Function to initialize the LimeSDR device
+
+    This function will initialize the LimeSDR device and set the parameters
+    defined in the LimeCfg structure.
+  
+    int Npulses: number of pulses to be generated
+    return: LimeConfig_t structure with the default parameters set
+*/
 LimeConfig_t initializeLimeConfig(int Npulses);
+
+
+/* Function to run the experiment from the LimeCfg structure 
+
+    This function will run the experiment defined by the LimeCfg structure. It will
+    initialize the LimeSDR, configure it, and run the experiment. The data will be
+    saved to an HDF5 file.
+  
+    LimeCfg: LimeConfig_t structure that defines the experiment parameters
+    return: 0 if successful, -1 if error
+*/
+int run_experiment_from_LimeCfg(LimeConfig_t LimeCfg);
 
 #endif // LIMECONFIG_H
