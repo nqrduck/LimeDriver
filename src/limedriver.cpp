@@ -604,12 +604,6 @@ int parseArguments(int argc, char **argv, LimeConfig_t &LimeCfg, std::vector<Con
     return 1;
   }
 
-  // convert input in seconds/Hz to samples
-  for (int ii = 0; ii < LimeCfg.Npulses; ii++) {
-    LimeCfg.p_dur_smp[ii] = round(LimeCfg.p_dur[ii] * LimeCfg.srate);
-    LimeCfg.p_frq_smp[ii] = LimeCfg.p_frq[ii] / LimeCfg.srate;
-  }
-
   return 0;
 
 }
@@ -667,6 +661,11 @@ int run_experiment(LimeConfig_t LimeCfg, std::vector<Config2HDFattr_t> &HDFattrV
   Config2HDFattr_t HDFattr[no_of_attr];
   std::copy(HDFattrVector.begin(), HDFattrVector.end(), HDFattr);
 
+  // convert input in seconds/Hz to samples
+  for (int ii = 0; ii < LimeCfg.Npulses; ii++) {
+    LimeCfg.p_dur_smp[ii] = round(LimeCfg.p_dur[ii] * LimeCfg.srate);
+    LimeCfg.p_frq_smp[ii] = LimeCfg.p_frq[ii] / LimeCfg.srate;
+  }
 
  // check directory first
   if (makePath(LimeCfg.save_path) == 0) {
