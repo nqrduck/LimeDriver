@@ -1902,7 +1902,8 @@ int run_experiment_from_LimeCfg(LimeConfig_t LimeCfg){
   // Getting HDF Attributes from dedicated function
   std::vector<Config2HDFattr_t> HDFattrVector = getHDFAttributes(LimeCfg);
 
-  run_experiment(LimeCfg, HDFattrVector);
+  int status = run_experiment(LimeCfg, HDFattrVector);
+  return status;
 }
 
 int main(int argc, char **argv) {
