@@ -354,40 +354,49 @@ LimeConfig_t initializeLimeConfig(int Npulses) {
   LimeCfg.TX_QcorrDC = 50; // DC corr to TX mixer at IF
 
   // Allocate the arrays with pulse parametes
-  LimeCfg.p_dur = new double[LimeCfg.Npulses]; // pulse duration (secs)
-  LimeCfg.p_offs = new int[LimeCfg.Npulses];   // pulse time offset
-  LimeCfg.p_amp = new double[LimeCfg.Npulses]; // pulse digital IF amplitude
-  LimeCfg.p_frq =
-      new double[LimeCfg.Npulses]; // pulse digital IF frequency (unit: Hz)
-  LimeCfg.p_pha = new double[LimeCfg.Npulses]; // pulse digital IF phase
-  LimeCfg.p_phacyc_N =
-      new int[LimeCfg.Npulses]; // number of pulse phases (cycled within 2*pi,
-                                // must be at least 1)
-  LimeCfg.p_phacyc_lev =
-      new int[LimeCfg.Npulses]; // stacking level of phase cycle (for eventual
-                                // coupling)
-  LimeCfg.p_c0_en = new int[LimeCfg.Npulses]; // pulse-wise enable of marker c0
-  LimeCfg.p_c1_en = new int[LimeCfg.Npulses]; // pulse-wise enable of marker c1
-  LimeCfg.p_c2_en = new int[LimeCfg.Npulses]; // pulse-wise enable of marker c2
-  LimeCfg.p_c3_en = new int[LimeCfg.Npulses]; // pulse-wise enable of marker c3
+	LimeCfg.p_dur		= new double[LimeCfg.Npulses];	// pulse duration (secs) 
+	LimeCfg.p_offs		= new int[LimeCfg.Npulses];	// pulse time offset
+	LimeCfg.p_amp		= new double[LimeCfg.Npulses];	// pulse digital IF amplitude
+	LimeCfg.p_frq		= new double[LimeCfg.Npulses];	// pulse digital IF frequency (unit: Hz)
+	LimeCfg.p_pha		= new double[LimeCfg.Npulses];	// pulse digital IF phase
+	LimeCfg.p_phacyc_N	= new int[LimeCfg.Npulses];	// number of pulse phases (cycled within 2*pi, must be at least 1)
+	LimeCfg.p_phacyc_lev	= new int[LimeCfg.Npulses];	// stacking level of phase cycle (for eventual coupling)
+	LimeCfg.p_c0_en		= new int[LimeCfg.Npulses];	// pulse-wise enable of marker c0
+	LimeCfg.p_c1_en		= new int[LimeCfg.Npulses];	// pulse-wise enable of marker c1
+	LimeCfg.p_c2_en		= new int[LimeCfg.Npulses];	// pulse-wise enable of marker c2
+	LimeCfg.p_c3_en		= new int[LimeCfg.Npulses];	// pulse-wise enable of marker c3
+	LimeCfg.am_frq 		= new double[LimeCfg.Npulses];	// pulse AM frequency
+	LimeCfg.am_pha 		= new double[LimeCfg.Npulses];	// pulse AM phase
+	LimeCfg.am_depth	= new double[LimeCfg.Npulses];	// pulse AM depth
+	LimeCfg.am_mode		= new int[LimeCfg.Npulses];	// pulse AM mode (0: sinus, 1: triangle, 2: square)
+	LimeCfg.fm_frq 		= new double[LimeCfg.Npulses];	// pulse FM frequency
+	LimeCfg.fm_pha 		= new double[LimeCfg.Npulses];	// pulse FM phase
+	LimeCfg.fm_width	= new double[LimeCfg.Npulses];	// pulse FM width
+	LimeCfg.fm_mode		= new int[LimeCfg.Npulses];	// pulse FM mode (0: sinus, 1: triangle, 2: square)
 
-  // and set standard values
-  for (int ii = 0; ii < LimeCfg.Npulses; ii++) {
+	// and set standard values
+	for (int ii = 0; ii < LimeCfg.Npulses; ii++) {
 
-    LimeCfg.p_dur[ii] = 2e-6;
-    LimeCfg.p_offs[ii] =
-        (4080 * 3) /
-        (LimeCfg.Npulses + 1); // distribute them evenly within the buffer...
-    LimeCfg.p_amp[ii] = 1.0;
-    LimeCfg.p_frq[ii] = 4.0 / LimeCfg.p_dur[0];
-    LimeCfg.p_pha[ii] = 0.0;
-    LimeCfg.p_phacyc_N[ii] = 1;
-    LimeCfg.p_phacyc_lev[ii] = 0;
-    LimeCfg.p_c0_en[ii] = 1;
-    LimeCfg.p_c1_en[ii] = 1;
-    LimeCfg.p_c2_en[ii] = 1;
-    LimeCfg.p_c3_en[ii] = 1;
-  }
+		LimeCfg.p_dur[ii] 	= 2e-6;
+		LimeCfg.p_offs[ii] 	= (4080*3)/(LimeCfg.Npulses+1);  // distribute them evenly within the buffer...
+		LimeCfg.p_amp[ii]	= 1.0;
+		LimeCfg.p_frq[ii] 	= 4.0/LimeCfg.p_dur[0];
+		LimeCfg.p_pha[ii]	= 0.0;
+		LimeCfg.p_phacyc_N[ii]	= 1;
+		LimeCfg.p_phacyc_lev[ii]= 0;
+		LimeCfg.p_c0_en[ii]	= 1;
+		LimeCfg.p_c1_en[ii]	= 1;
+		LimeCfg.p_c2_en[ii]	= 1;
+		LimeCfg.p_c3_en[ii]	= 1;
+		LimeCfg.am_frq[ii]	= 0;
+		LimeCfg.am_pha[ii]	= 0;
+		LimeCfg.am_depth[ii]	= 0;
+		LimeCfg.am_mode[ii]	= 0;
+		LimeCfg.fm_frq[ii]	= 0;
+		LimeCfg.fm_pha[ii]	= 0;
+		LimeCfg.fm_width[ii]	= 0;
+		LimeCfg.fm_mode[ii]	= 0;
+	}
 
   // Timing of TTL controls: [enabled? , pre, offs, post]
   int c0_tim[4] = {0, 70, 56, -5};
