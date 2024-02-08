@@ -112,4 +112,6 @@ struct Config2HDFattr_t {
 // Device structure, should be initialize to NULL
 static lms_device_t *device = NULL;
 
+LimeConfig_t initializeLimeConfig(int Npulses);
+
 #endif // LIMECONFIG_H

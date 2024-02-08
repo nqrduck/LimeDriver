@@ -325,16 +325,16 @@ void dumpConfig(std::vector<Config2HDFattr_t> &config) {
   std::cout << "}" << std::endl;
 }
 
-LimeConfig_t initializeLimeConfig(int Npulses,
-                                  std::ostringstream &stringstream) {
+LimeConfig_t initializeLimeConfig(int Npulses) {
   /* Initialize the LimeConfig_t struct
 
   @param Npulses: Number of pulses
-  @param stringstream: std::ostringstream object
 
   @return LimeConfig_t: LimeConfig_t struct with default values
 
   */
+  std::ostringstream stringstream;
+
   LimeConfig_t LimeCfg{};
 
   LimeCfg.Npulses = Npulses;
@@ -1895,10 +1895,18 @@ DC_Q << endl;
 
 }
 
+int run_experiment_from_LimeCfg(LimeConfig_t LimeCfg){
+
+  int Npulses = LimeCfg.Npulses; // Number of pulses from the LimeCfg
+
+  // Getting HDF Attributes from dedicated function
+  std::vector<Config2HDFattr_t> HDFattrVector = getHDFAttributes(LimeCfg);
+
+  run_experiment(LimeCfg, HDFattrVector);
+}
+
 int main(int argc, char **argv) {
   const double pi = acos(-1);
-
-  std::ostringstream stringstream;
 
   int Npulses = 2; // default number of pulses
   // check if nPulses has been given as argument, so that all the arrays are
@@ -1911,7 +1919,7 @@ int main(int argc, char **argv) {
   }
 
   // Initialize the LimeConfig_t struct
-  LimeConfig_t LimeCfg = initializeLimeConfig(Npulses, stringstream);
+  LimeConfig_t LimeCfg = initializeLimeConfig(Npulses);
 
   // Getting HDF Attributes from dedicated function
   std::vector<Config2HDFattr_t> HDFattrVector = getHDFAttributes(LimeCfg);
