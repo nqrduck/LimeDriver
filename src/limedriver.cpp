@@ -648,59 +648,32 @@ double Modfunction(double argument, int mode) {
   return retval;
 }
 
-int main(int argc, char **argv) {
+int run_experiment(LimeConfig_t LimeCfg, std::vector<Config2HDFattr_t> &HDFattrVector) {
+  /* Run the experiment
+
+  @param LimeCfg: LimeConfig_t struct
+  @param Config2HDFattr_t: HDFattr_t struct
+  @param device: lms_device_t struct
+
+  @return int: 0 if successful, -1 if not
+
+  */
+  std::ostringstream stringstream;
   const double pi = acos(-1);
 
-  std::ostringstream stringstream;
+   size_t no_of_attr = HDFattrVector.size();
 
-  int Npulses = 2; // default number of pulses
-  // check if nPulses has been given as argument, so that all the arrays are
-  // initialized with proper size
-  for (int ii_arg = 1; ii_arg < argc; ii_arg++) {
-    if (strcmp(argv[ii_arg], "-npu") == 0 && ii_arg + 1 < argc) {
-      Npulses = atoi(argv[ii_arg + 1]);
-      break;
-    }
-  }
+  // Converting to array to maintain compatibility with older code
+  Config2HDFattr_t HDFattr[no_of_attr];
+  std::copy(HDFattrVector.begin(), HDFattrVector.end(), HDFattr);
 
-  // Initialize the LimeConfig_t struct
-  LimeConfig_t LimeCfg = initializeLimeConfig(Npulses, stringstream);
 
-  // Getting HDF Attributes from dedicated function
-  std::vector<Config2HDFattr_t> HDFattrVector = getHDFAttributes(LimeCfg);
-  size_t no_of_attr = HDFattrVector.size();
-
-  bool dumpFlag = false;
-
-  // Checking for dump flag
-  for (int i = 1; i < argc; ++i) {
-    if (strcmp(argv[i], "--dump") == 0) {
-      dumpFlag = true;
-    }
-  }
-
-  // If dump flag is set, dump the config and exit
-  if (dumpFlag) {
-    dumpConfig(HDFattrVector);
-    std::exit(0);
-  }
-
-  
-  // Parse command line arguments
-  if (parseArguments(argc, argv, LimeCfg, HDFattrVector) != 0) {
-    return 1;
-  }
-
-  // check directory first
+ // check directory first
   if (makePath(LimeCfg.save_path) == 0) {
     cout << "Problem entering the specified path: " << LimeCfg.save_path
          << endl;
     return 1;
   }
-
-  // Converting to array to maintain compatibility with older code
-  Config2HDFattr_t HDFattr[no_of_attr];
-  std::copy(HDFattrVector.begin(), HDFattrVector.end(), HDFattr);
 
   // Find devices
   int n;
@@ -1919,4 +1892,53 @@ DC_Q << endl;
   LMS_Close(device);
 
   return 0;
+
+}
+
+int main(int argc, char **argv) {
+  const double pi = acos(-1);
+
+  std::ostringstream stringstream;
+
+  int Npulses = 2; // default number of pulses
+  // check if nPulses has been given as argument, so that all the arrays are
+  // initialized with proper size
+  for (int ii_arg = 1; ii_arg < argc; ii_arg++) {
+    if (strcmp(argv[ii_arg], "-npu") == 0 && ii_arg + 1 < argc) {
+      Npulses = atoi(argv[ii_arg + 1]);
+      break;
+    }
+  }
+
+  // Initialize the LimeConfig_t struct
+  LimeConfig_t LimeCfg = initializeLimeConfig(Npulses, stringstream);
+
+  // Getting HDF Attributes from dedicated function
+  std::vector<Config2HDFattr_t> HDFattrVector = getHDFAttributes(LimeCfg);
+  size_t no_of_attr = HDFattrVector.size();
+
+  bool dumpFlag = false;
+
+  // Checking for dump flag
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--dump") == 0) {
+      dumpFlag = true;
+    }
+  }
+
+  // If dump flag is set, dump the config and exit
+  if (dumpFlag) {
+    dumpConfig(HDFattrVector);
+    std::exit(0);
+  }
+
+  
+  // Parse command line arguments
+  if (parseArguments(argc, argv, LimeCfg, HDFattrVector) != 0) {
+    return 1;
+  }
+
+  run_experiment(LimeCfg, HDFattrVector);
+
+ 
 }
