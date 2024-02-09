@@ -1903,6 +1903,11 @@ DC_Q << endl;
   // Close device
   LMS_Close(device);
 
+  // Deallocate HDFattr
+  for (int ii = 0; ii < no_of_attr; ii++) {
+    free(HDFattr[ii].Value);
+  }
+
   return 0;
 
 }
