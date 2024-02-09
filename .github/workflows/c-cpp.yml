@@ -27,3 +27,8 @@ jobs:
     - name: Build
       run: cmake -S . -B build && cmake --build build
     
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: build
+        path: build
