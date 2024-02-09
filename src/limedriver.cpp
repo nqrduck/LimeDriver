@@ -1903,11 +1903,6 @@ DC_Q << endl;
   // Close device
   LMS_Close(device);
 
-  // Deallocate HDFattr
-  for (int ii = 0; ii < no_of_attr; ii++) {
-    free(HDFattr[ii].Value);
-  }
-
   return 0;
 
 }
@@ -1966,5 +1961,5 @@ int main(int argc, char **argv) {
 
   run_experiment(LimeCfg, HDFattrVector);
 
- 
+  return 0;
 }
