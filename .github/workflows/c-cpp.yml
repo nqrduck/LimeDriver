@@ -12,6 +12,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Set up build requirements
+      run: sudo apt-get update -y && sudo apt-get install -y cmake g++
+
     - name: Install LimeSuite dependencies
       run: sudo apt-get update -y && sudo apt-get install -y limesuite liblimesuite-dev
 
@@ -20,11 +23,6 @@ jobs:
     
     - name: Check out code
       uses: actions/checkout@v3
-
-    - name: Set up CMake
-      uses: actions/setup-cmake@v1
-      with:
-        cmake-version: '3.28.1'
 
     - name: Build
       run: cmake -S . -B build && cmake --build build
