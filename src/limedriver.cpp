@@ -536,6 +536,41 @@ int parseArguments(int argc, char **argv, LimeConfig_t &LimeCfg,
 
   */
 
+  // Checking for dump flag
+  bool dumpFlag = false;
+
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--dump") == 0) {
+      dumpFlag = true;
+    }
+  }
+
+  // If dump flag is set, dump the config and exit
+  if (dumpFlag) {
+    dumpConfig(HDFattrVector);
+    std::exit(0);
+  }
+
+  // Checking for devices flag
+  bool devicesFlag = false;
+
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--devices") == 0) {
+      devicesFlag = true;
+    }
+  }
+
+  // If devices flag is set, list the devices and exit
+  if (devicesFlag) {
+    std::vector<string> devices = getDeviceList();
+
+    for (auto &device : devices) {
+      std::cout << device << std::endl;
+    }
+
+    std::exit(0);
+  }
+
   size_t no_of_attr = HDFattrVector.size();
 
   // iterate through arguments to parse eventual user input
@@ -553,7 +588,13 @@ int parseArguments(int argc, char **argv, LimeConfig_t &LimeCfg,
     if (argv[ii_arg][0] == '-') {
 
       if ((strlen(argv[ii_arg] + 1) != 3) && (attr2read == 0)) {
-        cout << "Invalid argument " << ii_arg << ": " << argv[ii_arg] << endl;
+        // If it is not a valid argument and we are not in the middle of
+        // reading an attribute, print an error message - unless the argument is
+        // --help, in which case we just print the permitted arguments below
+        if (!strcmp(argv[ii_arg], "--help") == 0) {
+          cout << "Invalid argument " << ii_arg << ": " << argv[ii_arg] << endl;
+        }
+
         parse_prob = true;
         continue;
       }
@@ -666,9 +707,24 @@ int parseArguments(int argc, char **argv, LimeConfig_t &LimeCfg,
     parse_prob = true;
   }
   if (parse_prob) {
-    cout << "Exiting due to problem with provided arguments! Valid arguments "
-            "are (except -///, which cannot be set by the user):"
-         << endl;
+
+    // check if --help was passed
+    bool helpFlag = false;
+
+    for (int i = 1; i < argc; ++i) {
+      if (strcmp(argv[i], "--help") == 0) {
+        helpFlag = true;
+      }
+    }
+
+    if (!helpFlag) {
+      cout << "Exiting due to problem with provided arguments! Valid arguments "
+              "are (except -///, which cannot be set by the user):"
+           << endl;
+    }
+
+    // TODO: More help, and a more elegant way to print the help
+
     string datatype;
     for (int ii_attr = 0; ii_attr < no_of_attr; ii_attr++) {
 
@@ -2252,21 +2308,6 @@ int main(int argc, char **argv) {
   // Getting HDF Attributes from dedicated function
   std::vector<Config2HDFattr_t> HDFattrVector = getHDFAttributes(LimeCfg);
   size_t no_of_attr = HDFattrVector.size();
-
-  bool dumpFlag = false;
-
-  // Checking for dump flag
-  for (int i = 1; i < argc; ++i) {
-    if (strcmp(argv[i], "--dump") == 0) {
-      dumpFlag = true;
-    }
-  }
-
-  // If dump flag is set, dump the config and exit
-  if (dumpFlag) {
-    dumpConfig(HDFattrVector);
-    std::exit(0);
-  }
 
   // Parse command line arguments
   if (parseArguments(argc, argv, LimeCfg, HDFattrVector) != 0) {
