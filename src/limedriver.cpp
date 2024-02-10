@@ -2200,7 +2200,8 @@ DC_Q << endl;
 }
 
 int run_experiment_from_LimeCfg(LimeConfig_t LimeCfg) {
-
+  cout << "Running Version: " << VERSION << endl;
+  
   int Npulses = LimeCfg.Npulses; // Number of pulses from the LimeCfg
 
   // Getting HDF Attributes from dedicated function

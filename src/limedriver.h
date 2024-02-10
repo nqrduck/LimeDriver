@@ -24,6 +24,7 @@
 #include <direct.h> // _mkdir
 #endif
 
+#define VERSION "0.1.0"
 
 struct LimeConfig_t {
 
