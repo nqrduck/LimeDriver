@@ -9,8 +9,7 @@ LimeSuite
 HDF5 library
 
 compilation:
-$(h5c++ -show) limedriver.cpp -std=c++11 $(pkg-config --cflags --libs LimeSuite)
--o limedriver
+h5c++ -shlib limedriver.cpp -std=c++11 -lLimeSuite -o limedriver
 
  */
 
