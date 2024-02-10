@@ -14,6 +14,8 @@ h5c++ -shlib limedriver.cpp -std=c++11 -lLimeSuite -o limedriver
  */
 
 #include "limedriver.h"
+#include <lime/LimeSuite.h>
+#include <vector>
 
 using namespace std;
 
@@ -89,6 +91,26 @@ bool makePath(const std::string &path) {
 inline bool file_exists(const std::string &name) {
   struct stat buffer;
   return (stat(name.c_str(), &buffer) == 0);
+}
+
+std::vector<string> getDeviceList() {
+  // Get the list of available devices
+  int n = LMS_GetDeviceList(NULL);
+
+  lms_info_str_t list[n];
+  LMS_GetDeviceList(list);
+
+  if (n < 0) {
+    std::cout << "Error: " << n << std::endl;
+  }
+
+  std::vector<string> deviceList(n);
+
+  for (int i = 0; i < n; i++) {
+    deviceList[i] = list[i];
+  }
+
+  return deviceList;
 }
 
 // Custom function to read back the gain of the RX/TX channels. The API function
@@ -739,18 +761,14 @@ int run_experiment(LimeConfig_t LimeCfg,
   }
 
   // Find devices
-  int n;
-  lms_info_str_t list[8]; // should be large enough to hold all detected devices
-  if ((n = LMS_GetDeviceList(list)) <
-      0) // NULL can be passed to only get number of devices
-    error();
+  std::vector<string> list = getDeviceList();
 
-  cout << "Devices found: " << n << endl; // print number of devices
-  if (n < 1)
+  cout << "Devices found: " << list.size() << endl; // print number of devices
+  if (list.size() < 1)
     return -1;
 
   // open the first device
-  if (LMS_Open(&device, list[0], NULL))
+  if (LMS_Open(&device, list[0].c_str(), NULL))
     error();
 
   /*
@@ -768,12 +786,13 @@ int run_experiment(LimeConfig_t LimeCfg,
   */
 
   // Get number of channels
-  if ((n = LMS_GetNumChannels(device, LMS_CH_RX)) < 0)
+  int num_rx_channels, num_tx_channels;
+  if ((num_rx_channels = LMS_GetNumChannels(device, LMS_CH_RX)) < 0)
     error();
-  cout << "Number of RX channels: " << n << endl;
-  if ((n = LMS_GetNumChannels(device, LMS_CH_TX)) < 0)
+  cout << "Number of RX channels: " << num_rx_channels << endl;
+  if ((num_tx_channels = LMS_GetNumChannels(device, LMS_CH_TX)) < 0)
     error();
-  cout << "Number of TX channels: " << n << endl;
+  cout << "Number of TX channels: " << num_tx_channels << endl;
 
   // check if the settings are already there
   float_type frq_read;
@@ -923,43 +942,47 @@ DC_Q << endl;
     lms_name_t antenna_list[10]; // large enough list for antenna names.
     // Alternatively, NULL can be passed to LMS_GetAntennaList() to obtain
     // number of antennae
-    if ((n = LMS_GetAntennaList(device, LMS_CH_RX, 0, antenna_list)) < 0)
+    int num_antennas;
+    if ((num_antennas =
+             LMS_GetAntennaList(device, LMS_CH_RX, 0, antenna_list)) < 0)
       error();
 
     cout << "Available RX LNAs:\n"; // print available antennae names
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < num_antennas; i++)
       cout << i << ": " << antenna_list[i] << endl;
     // get and print antenna index and name
-    if ((n = LMS_GetAntenna(device, LMS_CH_RX, 0)) < 0)
+    int antenna_index;
+    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_RX, 0)) < 0)
       error();
-    cout << "Automatically selected RX LNA: " << n << ": " << antenna_list[n]
-         << endl;
+    cout << "Automatically selected RX LNA: " << antenna_index << ": "
+         << antenna_list[antenna_index] << endl;
 
     // manually select antenna
     if (LMS_SetAntenna(device, LMS_CH_RX, 0, LMS_PATH_LNAL) != 0)
       error();
 
     // get and print antenna index and name
-    if ((n = LMS_GetAntenna(device, LMS_CH_RX, 0)) < 0)
+    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_RX, 0)) < 0)
       error();
-    cout << "Manually selected RX LNA: " << n << ": " << antenna_list[n]
-         << endl;
+    cout << "Manually selected RX LNA: " << antenna_index << ": "
+         << antenna_list[antenna_index] << endl;
 
     // select antenna port
     // Alternatively, NULL can be passed to LMS_GetAntennaList() to obtain
     // number of antennae
-    if ((n = LMS_GetAntennaList(device, LMS_CH_TX, 0, antenna_list)) < 0)
+    if ((num_antennas =
+             LMS_GetAntennaList(device, LMS_CH_TX, 0, antenna_list)) < 0)
       error();
 
     cout << "Available TX pathways:\n"; // print available antennae names
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < num_antennas; i++)
       cout << i << ": " << antenna_list[i] << endl;
 
     // get and print print antenna index and name
-    if ((n = LMS_GetAntenna(device, LMS_CH_TX, 0)) < 0)
+    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_TX, 0)) < 0)
       error();
-    cout << "Automatically selected TX pathway: " << n << ": "
-         << antenna_list[n] << endl;
+    cout << "Automatically selected TX pathway: " << antenna_index << ": "
+         << antenna_list[antenna_index] << endl;
 
     // manually select antenna
     int mychoice = LMS_PATH_TX1;
@@ -969,10 +992,10 @@ DC_Q << endl;
       error();
 
     // get and print print antenna index and name
-    if ((n = LMS_GetAntenna(device, LMS_CH_TX, 0)) < 0)
+    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_TX, 0)) < 0)
       error();
-    cout << "Manually selected TX pathway: " << n << ": " << antenna_list[n]
-         << endl;
+    cout << "Manually selected TX pathway: " << antenna_index << ": "
+         << antenna_list[antenna_index] << endl;
 
     // Set sample rate, w/o oversampling, so that we can remove the invsinc
     // filter
@@ -2200,7 +2223,7 @@ DC_Q << endl;
 
 int run_experiment_from_LimeCfg(LimeConfig_t LimeCfg) {
   cout << "Running Version: " << VERSION << endl;
-  
+
   int Npulses = LimeCfg.Npulses; // Number of pulses from the LimeCfg
 
   // Getting HDF Attributes from dedicated function
