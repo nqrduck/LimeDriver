@@ -667,7 +667,7 @@ int parseArguments(int argc, char **argv, LimeConfig_t &LimeCfg,
   }
   if (parse_prob) {
     cout << "Exiting due to problem with provided arguments! Valid arguments "
-            "are (exept -///, which cannot be set by the user):"
+            "are (except -///, which cannot be set by the user):"
          << endl;
     string datatype;
     for (int ii_attr = 0; ii_attr < no_of_attr; ii_attr++) {
