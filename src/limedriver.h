@@ -29,7 +29,7 @@
 struct LimeConfig_t {
 
   float srate;
-  float channel;
+  int channel;
   float frq;
   float frq_set;
   float RX_LPF;
