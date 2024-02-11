@@ -24,11 +24,12 @@
 #include <direct.h> // _mkdir
 #endif
 
-#define VERSION "0.1.0"
+#define VERSION "0.2.0"
 
 struct LimeConfig_t {
 
   float srate;
+  float channel;
   float frq;
   float frq_set;
   float RX_LPF;

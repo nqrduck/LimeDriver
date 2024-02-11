@@ -14,6 +14,7 @@ h5c++ -shlib limedriver.cpp -std=c++11 -lLimeSuite -o limedriver
  */
 
 #include "limedriver.h"
+#include <H5PredType.h>
 #include <lime/LimeSuite.h>
 #include <vector>
 
@@ -192,6 +193,7 @@ int GetGainRXTX(int *RXgain, int *TXgain) {
 std::vector<Config2HDFattr_t> getHDFAttributes(LimeConfig_t &LimeCfg) {
   std::vector<Config2HDFattr_t> HDFattr = {
       {"sra", "SampleRate [Hz]", H5::PredType::IEEE_F32LE, &LimeCfg.srate, 1},
+      {"chn", "Channel", H5::PredType::NATIVE_INT, &LimeCfg.channel, 1},
       {"lof", "LO Frequency [Hz]", H5::PredType::IEEE_F32LE, &LimeCfg.frq, 1},
       {"rlp", "RX LowPass BW [Hz]", H5::PredType::IEEE_F32LE, &LimeCfg.RX_LPF,
        1},
@@ -397,6 +399,7 @@ LimeConfig_t initializeLimeConfig(int Npulses) {
   // modification!
 
   LimeCfg.srate = 30.72e6; // sample rate of the IF DAC/ADC
+  LimeCfg.channel = 0;     // channel to use,
   LimeCfg.frq = 50e6;      // LO carrier frequency
   LimeCfg.RX_gain = 20;    // total gain of the receiver
   LimeCfg.TX_gain = 30;    // total gain of the transmitter
@@ -852,11 +855,12 @@ int run_experiment(LimeConfig_t LimeCfg,
 
   // check if the settings are already there
   float_type frq_read;
-  if (LMS_GetLOFrequency(device, LMS_CH_RX, 0, &frq_read) != 0)
+  if (LMS_GetLOFrequency(device, LMS_CH_RX, LimeCfg.channel, &frq_read) != 0)
     error();
 
   float_type srate_read, rf_rate;
-  if (LMS_GetSampleRate(device, LMS_CH_RX, 0, &srate_read, &rf_rate) != 0)
+  if (LMS_GetSampleRate(device, LMS_CH_RX, LimeCfg.channel, &srate_read,
+                        &rf_rate) != 0)
     error();
 
   bool frqdev = fabs(frq_read - LimeCfg.frq) > 1.0;
@@ -922,7 +926,7 @@ int run_experiment(LimeConfig_t LimeCfg,
     // First mute the TX output, as the init commands create a lot of garbage
     if (LMS_WriteParam(device, LMS7_PD_TLOBUF_TRF, 1) != 0)
       error();
-    if (LMS_SetGaindB(device, LMS_CH_TX, 0, 0) != 0) {
+    if (LMS_SetGaindB(device, LMS_CH_TX, LimeCfg.channel, 0) != 0) {
 
       cout << "Initializing device first!" << endl;
 
@@ -931,33 +935,44 @@ int run_experiment(LimeConfig_t LimeCfg,
       if (LMS_Init(device) != 0)
         error();
       // retry
-      if (LMS_SetGaindB(device, LMS_CH_TX, 0, 0) != 0)
+      if (LMS_SetGaindB(device, LMS_CH_TX, LimeCfg.channel, 0) != 0)
         error();
     }
-    if (LMS_SetNormalizedGain(device, LMS_CH_TX, 0, 0.0) != 0)
+    if (LMS_SetNormalizedGain(device, LMS_CH_TX, LimeCfg.channel, 0.0) != 0)
       error();
 
     // Set RX center frequency
-    if (LMS_SetLOFrequency(device, LMS_CH_RX, 0, LimeCfg.frq) != 0)
+    if (LMS_SetLOFrequency(device, LMS_CH_RX, LimeCfg.channel, LimeCfg.frq) !=
+        0)
       error();
 
     // Set TX center frequency
-    if (LMS_SetLOFrequency(device, LMS_CH_TX, 0, LimeCfg.frq) != 0)
+    if (LMS_SetLOFrequency(device, LMS_CH_TX, LimeCfg.channel, LimeCfg.frq) !=
+        0)
       error();
 
     // Read back the updated frequency for later storage
-    if (LMS_GetLOFrequency(device, LMS_CH_RX, 0, &frq_read) != 0)
+    if (LMS_GetLOFrequency(device, LMS_CH_RX, LimeCfg.channel, &frq_read) != 0)
       error();
 
     // Enable RX channel
     // Channels are numbered starting at 0
-    if (LMS_EnableChannel(device, LMS_CH_RX, 0, true) != 0)
+    if (LMS_EnableChannel(device, LMS_CH_RX, LimeCfg.channel, true) != 0)
       error();
     // Enable TX channels
-    if (LMS_EnableChannel(device, LMS_CH_TX, 0, true) != 0)
+    if (LMS_EnableChannel(device, LMS_CH_TX, LimeCfg.channel, true) != 0)
+      error();
+
+    // fwd the TX1 LO to TX2
+    if (LMS_WriteParam(device, LMS7_EN_NEXTTX_TRF, true) != 0)
+      error();
+    if (LMS_WriteParam(device, LMS7_EN_NEXTRX_RFE, true) != 0)
       error();
 
     // apply DC offset in TxTSP
+    if (LMS_WriteParam(device, LMS7_MAC, LimeCfg.channel + 1) != 0)
+      error();
+    // if (LMS_WriteParam(device, LMS7_MAC, LimeCfg.channel) != 0) error();
     uint16_t DC_I, DC_Q, DC_EN;
     DC_EN = 0;
     if (LMS_WriteParam(device, LMS7_DCCORRI_TXTSP, LimeCfg.TX_IcorrDC) != 0)
@@ -982,8 +997,11 @@ int run_experiment(LimeConfig_t LimeCfg,
 
     // added by me as the IQ calibration did not happen on the chip from python
     // or c++
-    if (LMS_WriteParam(device, LMS7_MAC, 1) != 0)
+    if (LMS_WriteParam(device, LMS7_MAC, LimeCfg.channel + 1) != 0)
       error();
+
+    // if (LMS_WriteParam(device, LMS7_MAC, LimeCfg.channel) != 0)
+    //   error();
     /*
 // read back DC offset in TxTSP
 if (LMS_ReadParam(device, LMS7_DCCORRI_TXTSP, &DC_I) != 0) error();
@@ -999,8 +1017,8 @@ DC_Q << endl;
     // Alternatively, NULL can be passed to LMS_GetAntennaList() to obtain
     // number of antennae
     int num_antennas;
-    if ((num_antennas =
-             LMS_GetAntennaList(device, LMS_CH_RX, 0, antenna_list)) < 0)
+    if ((num_antennas = LMS_GetAntennaList(device, LMS_CH_RX, LimeCfg.channel,
+                                           antenna_list)) < 0)
       error();
 
     cout << "Available RX LNAs:\n"; // print available antennae names
@@ -1008,17 +1026,19 @@ DC_Q << endl;
       cout << i << ": " << antenna_list[i] << endl;
     // get and print antenna index and name
     int antenna_index;
-    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_RX, 0)) < 0)
+    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_RX, LimeCfg.channel)) <
+        0)
       error();
     cout << "Automatically selected RX LNA: " << antenna_index << ": "
          << antenna_list[antenna_index] << endl;
 
     // manually select antenna
-    if (LMS_SetAntenna(device, LMS_CH_RX, 0, LMS_PATH_LNAL) != 0)
+    if (LMS_SetAntenna(device, LMS_CH_RX, LimeCfg.channel, LMS_PATH_LNAL) != 0)
       error();
 
     // get and print antenna index and name
-    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_RX, 0)) < 0)
+    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_RX, LimeCfg.channel)) <
+        0)
       error();
     cout << "Manually selected RX LNA: " << antenna_index << ": "
          << antenna_list[antenna_index] << endl;
@@ -1026,8 +1046,8 @@ DC_Q << endl;
     // select antenna port
     // Alternatively, NULL can be passed to LMS_GetAntennaList() to obtain
     // number of antennae
-    if ((num_antennas =
-             LMS_GetAntennaList(device, LMS_CH_TX, 0, antenna_list)) < 0)
+    if ((num_antennas = LMS_GetAntennaList(device, LMS_CH_TX, LimeCfg.channel,
+                                           antenna_list)) < 0)
       error();
 
     cout << "Available TX pathways:\n"; // print available antennae names
@@ -1035,20 +1055,23 @@ DC_Q << endl;
       cout << i << ": " << antenna_list[i] << endl;
 
     // get and print print antenna index and name
-    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_TX, 0)) < 0)
+    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_TX, LimeCfg.channel)) <
+        0)
       error();
     cout << "Automatically selected TX pathway: " << antenna_index << ": "
          << antenna_list[antenna_index] << endl;
 
     // manually select antenna
-    int mychoice = LMS_PATH_TX1;
+    int tx_path = LMS_PATH_TX1;
     if (LimeCfg.frq > 1500e6)
-      mychoice = LMS_PATH_TX2;
-    if (LMS_SetAntenna(device, LMS_CH_TX, 0, mychoice) != 0)
+      tx_path = LMS_PATH_TX2;
+
+    if (LMS_SetAntenna(device, LMS_CH_TX, LimeCfg.channel, tx_path) != 0)
       error();
 
     // get and print print antenna index and name
-    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_TX, 0)) < 0)
+    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_TX, LimeCfg.channel)) <
+        0)
       error();
     cout << "Manually selected TX pathway: " << antenna_index << ": "
          << antenna_list[antenna_index] << endl;
@@ -1058,6 +1081,11 @@ DC_Q << endl;
     if (LMS_SetSampleRate(device, LimeCfg.srate, 1) != 0)
       error();
     // Invsinc, which removes that non-causal wiggle in timedomain
+
+    // if (LMS_WriteParam(device, LMS7_MAC, chn) != 0) error();
+    if (LMS_WriteParam(device, LMS7_MAC, LimeCfg.channel + 1) != 0)
+      error();
+
     if (LMS_WriteParam(device, LMS7_ISINC_BYP_TXTSP, 1) != 0)
       error();
     // CMIX: Disable, as it is not used
@@ -1076,9 +1104,9 @@ DC_Q << endl;
       error();
 
     // Set RX and TX to the gain values
-    if (LMS_SetGaindB(device, LMS_CH_TX, 0, LimeCfg.TX_gain) != 0)
+    if (LMS_SetGaindB(device, LMS_CH_TX, LimeCfg.channel, LimeCfg.TX_gain) != 0)
       error();
-    if (LMS_SetGaindB(device, LMS_CH_RX, 0, LimeCfg.RX_gain) != 0)
+    if (LMS_SetGaindB(device, LMS_CH_RX, LimeCfg.channel, LimeCfg.RX_gain) != 0)
       error();
 
     cout << "After gain setting: " << endl;
@@ -1126,16 +1154,16 @@ DC_Q << endl;
     cout << "TX LPF bandwitdh range: " << range.min / 1e6 << " - "
          << range.max / 1e6 << " MHz\n\n";
 
-    if (LMS_SetLPFBW(device, LMS_CH_RX, 0, LimeCfg.RX_LPF) != 0)
+    if (LMS_SetLPFBW(device, LMS_CH_RX, LimeCfg.channel, LimeCfg.RX_LPF) != 0)
       error();
-    if (LMS_SetLPFBW(device, LMS_CH_TX, 0, LimeCfg.TX_LPF) != 0)
+    if (LMS_SetLPFBW(device, LMS_CH_TX, LimeCfg.channel, LimeCfg.TX_LPF) != 0)
       error();
 
     float_type LPFBW; // lowpass bandwidth
-    if (LMS_GetLPFBW(device, LMS_CH_RX, 0, &LPFBW) != 0)
+    if (LMS_GetLPFBW(device, LMS_CH_RX, LimeCfg.channel, &LPFBW) != 0)
       error();
     cout << "RX LPFBW: " << LPFBW / 1e6 << " MHz" << endl;
-    if (LMS_GetLPFBW(device, LMS_CH_TX, 0, &LPFBW) != 0)
+    if (LMS_GetLPFBW(device, LMS_CH_TX, LimeCfg.channel, &LPFBW) != 0)
       error();
     cout << "TX LPFBW: " << LPFBW / 1e6 << " MHz" << endl;
 
@@ -1189,7 +1217,7 @@ DC_Q << endl;
   // All streams setups should be done before starting streams. New streams
   // cannot be set-up if at least stream is running.
   for (int ii = 0; ii < chCount; ++ii) {
-    rx_streams[ii].channel = ii; // channel number
+    rx_streams[ii].channel = LimeCfg.channel; // channel number
     rx_streams[ii].fifoSize =
         buffersize * N_buffers_per_fifo; // fifo size in samples
     rx_streams[ii].throughputVsLatency =
@@ -1200,7 +1228,7 @@ DC_Q << endl;
     if (LMS_SetupStream(device, &rx_streams[ii]) != 0)
       error();
 
-    tx_streams[ii].channel = ii; // channel number
+    tx_streams[ii].channel = LimeCfg.channel; // channel number
     tx_streams[ii].fifoSize =
         buffersize * N_buffers_per_fifo; // fifo size in samples
     tx_streams[ii].throughputVsLatency =
@@ -1768,7 +1796,6 @@ DC_Q << endl;
             ii_TXrep++;
             // in case the entire experiment fits within the TX FIFO
             if (ii_TXrep == LimeCfg.repetitions) {
-              TXFIFO_slots = 0;
               break;
             }
           }
@@ -1783,7 +1810,6 @@ DC_Q << endl;
             ii_TXrep++;
             // in case the entire experiment fits within the TX FIFO
             if (ii_TXrep == LimeCfg.repetitions) {
-              TXFIFO_slots = 0;
               break;
             }
           }
@@ -1794,14 +1820,14 @@ DC_Q << endl;
     }
   }
 
-  /*
   // Check for the TX buffer and keep it filled
-  LMS_GetStreamStatus(tx_streams, &status); //Obtain TX stream stats
-  if (status.fifoFilledCount != 0) cout << TXFIFO_slots <<" TXFIFO slots free
-  before start: " << status.fifoFilledCount << " samples of " << status.fifoSize
-  << " with HW stamp " << status.timestamp <<" at RX timestamp" <<
-  rx_metadata.timestamp << endl;
-  */
+  LMS_GetStreamStatus(tx_streams, &status); // Obtain TX stream stats
+  if (status.fifoFilledCount != 0)
+    cout << TXFIFO_slots
+         << " TXFIFO slots free before start: " << status.fifoFilledCount
+         << " samples of " << status.fifoSize << " with HW stamp "
+         << status.timestamp << " at RX timestamp" << rx_metadata.timestamp
+         << endl;
 
   // Main acquisition loop
   while (ii_acq < LimeCfg.repetitions * LimeCfg.averages * num_phavar) {
