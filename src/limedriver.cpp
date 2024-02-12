@@ -14,6 +14,9 @@ h5c++ -shlib limedriver.cpp -std=c++11 -lLimeSuite -o limedriver
  */
 
 #include "limedriver.h"
+#include <H5PredType.h>
+#include <lime/LimeSuite.h>
+#include <vector>
 
 using namespace std;
 
@@ -89,6 +92,26 @@ bool makePath(const std::string &path) {
 inline bool file_exists(const std::string &name) {
   struct stat buffer;
   return (stat(name.c_str(), &buffer) == 0);
+}
+
+std::vector<string> getDeviceList() {
+  // Get the list of available devices
+  int n = LMS_GetDeviceList(NULL);
+
+  lms_info_str_t list[n];
+  LMS_GetDeviceList(list);
+
+  if (n < 0) {
+    std::cout << "Error: " << n << std::endl;
+  }
+
+  std::vector<string> deviceList(n);
+
+  for (int i = 0; i < n; i++) {
+    deviceList[i] = list[i];
+  }
+
+  return deviceList;
 }
 
 // Custom function to read back the gain of the RX/TX channels. The API function
@@ -170,6 +193,7 @@ int GetGainRXTX(int *RXgain, int *TXgain) {
 std::vector<Config2HDFattr_t> getHDFAttributes(LimeConfig_t &LimeCfg) {
   std::vector<Config2HDFattr_t> HDFattr = {
       {"sra", "SampleRate [Hz]", H5::PredType::IEEE_F32LE, &LimeCfg.srate, 1},
+      {"chn", "Channel", H5::PredType::NATIVE_INT, &LimeCfg.channel, 1},
       {"lof", "LO Frequency [Hz]", H5::PredType::IEEE_F32LE, &LimeCfg.frq, 1},
       {"rlp", "RX LowPass BW [Hz]", H5::PredType::IEEE_F32LE, &LimeCfg.RX_LPF,
        1},
@@ -375,6 +399,7 @@ LimeConfig_t initializeLimeConfig(int Npulses) {
   // modification!
 
   LimeCfg.srate = 30.72e6; // sample rate of the IF DAC/ADC
+  LimeCfg.channel = 0;     // channel to use,
   LimeCfg.frq = 50e6;      // LO carrier frequency
   LimeCfg.RX_gain = 20;    // total gain of the receiver
   LimeCfg.TX_gain = 30;    // total gain of the transmitter
@@ -514,6 +539,41 @@ int parseArguments(int argc, char **argv, LimeConfig_t &LimeCfg,
 
   */
 
+  // Checking for dump flag
+  bool dumpFlag = false;
+
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--dump") == 0) {
+      dumpFlag = true;
+    }
+  }
+
+  // If dump flag is set, dump the config and exit
+  if (dumpFlag) {
+    dumpConfig(HDFattrVector);
+    std::exit(0);
+  }
+
+  // Checking for devices flag
+  bool devicesFlag = false;
+
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--devices") == 0) {
+      devicesFlag = true;
+    }
+  }
+
+  // If devices flag is set, list the devices and exit
+  if (devicesFlag) {
+    std::vector<string> devices = getDeviceList();
+
+    for (auto &device : devices) {
+      std::cout << device << std::endl;
+    }
+
+    std::exit(0);
+  }
+
   size_t no_of_attr = HDFattrVector.size();
 
   // iterate through arguments to parse eventual user input
@@ -531,7 +591,13 @@ int parseArguments(int argc, char **argv, LimeConfig_t &LimeCfg,
     if (argv[ii_arg][0] == '-') {
 
       if ((strlen(argv[ii_arg] + 1) != 3) && (attr2read == 0)) {
-        cout << "Invalid argument " << ii_arg << ": " << argv[ii_arg] << endl;
+        // If it is not a valid argument and we are not in the middle of
+        // reading an attribute, print an error message - unless the argument is
+        // --help, in which case we just print the permitted arguments below
+        if (!strcmp(argv[ii_arg], "--help") == 0) {
+          cout << "Invalid argument " << ii_arg << ": " << argv[ii_arg] << endl;
+        }
+
         parse_prob = true;
         continue;
       }
@@ -644,9 +710,24 @@ int parseArguments(int argc, char **argv, LimeConfig_t &LimeCfg,
     parse_prob = true;
   }
   if (parse_prob) {
-    cout << "Exiting due to problem with provided arguments! Valid arguments "
-            "are (exept -///, which cannot be set by the user):"
-         << endl;
+
+    // check if --help was passed
+    bool helpFlag = false;
+
+    for (int i = 1; i < argc; ++i) {
+      if (strcmp(argv[i], "--help") == 0) {
+        helpFlag = true;
+      }
+    }
+
+    if (!helpFlag) {
+      cout << "Exiting due to problem with provided arguments! Valid arguments "
+              "are (except -///, which cannot be set by the user):"
+           << endl;
+    }
+
+    // TODO: More help, and a more elegant way to print the help
+
     string datatype;
     for (int ii_attr = 0; ii_attr < no_of_attr; ii_attr++) {
 
@@ -739,18 +820,14 @@ int run_experiment(LimeConfig_t LimeCfg,
   }
 
   // Find devices
-  int n;
-  lms_info_str_t list[8]; // should be large enough to hold all detected devices
-  if ((n = LMS_GetDeviceList(list)) <
-      0) // NULL can be passed to only get number of devices
-    error();
+  std::vector<string> list = getDeviceList();
 
-  cout << "Devices found: " << n << endl; // print number of devices
-  if (n < 1)
+  cout << "Devices found: " << list.size() << endl; // print number of devices
+  if (list.size() < 1)
     return -1;
 
   // open the first device
-  if (LMS_Open(&device, list[0], NULL))
+  if (LMS_Open(&device, list[0].c_str(), NULL))
     error();
 
   /*
@@ -768,20 +845,22 @@ int run_experiment(LimeConfig_t LimeCfg,
   */
 
   // Get number of channels
-  if ((n = LMS_GetNumChannels(device, LMS_CH_RX)) < 0)
+  int num_rx_channels, num_tx_channels;
+  if ((num_rx_channels = LMS_GetNumChannels(device, LMS_CH_RX)) < 0)
     error();
-  cout << "Number of RX channels: " << n << endl;
-  if ((n = LMS_GetNumChannels(device, LMS_CH_TX)) < 0)
+  cout << "Number of RX channels: " << num_rx_channels << endl;
+  if ((num_tx_channels = LMS_GetNumChannels(device, LMS_CH_TX)) < 0)
     error();
-  cout << "Number of TX channels: " << n << endl;
+  cout << "Number of TX channels: " << num_tx_channels << endl;
 
   // check if the settings are already there
   float_type frq_read;
-  if (LMS_GetLOFrequency(device, LMS_CH_RX, 0, &frq_read) != 0)
+  if (LMS_GetLOFrequency(device, LMS_CH_RX, LimeCfg.channel, &frq_read) != 0)
     error();
 
   float_type srate_read, rf_rate;
-  if (LMS_GetSampleRate(device, LMS_CH_RX, 0, &srate_read, &rf_rate) != 0)
+  if (LMS_GetSampleRate(device, LMS_CH_RX, LimeCfg.channel, &srate_read,
+                        &rf_rate) != 0)
     error();
 
   bool frqdev = fabs(frq_read - LimeCfg.frq) > 1.0;
@@ -847,7 +926,7 @@ int run_experiment(LimeConfig_t LimeCfg,
     // First mute the TX output, as the init commands create a lot of garbage
     if (LMS_WriteParam(device, LMS7_PD_TLOBUF_TRF, 1) != 0)
       error();
-    if (LMS_SetGaindB(device, LMS_CH_TX, 0, 0) != 0) {
+    if (LMS_SetGaindB(device, LMS_CH_TX, LimeCfg.channel, 0) != 0) {
 
       cout << "Initializing device first!" << endl;
 
@@ -856,33 +935,44 @@ int run_experiment(LimeConfig_t LimeCfg,
       if (LMS_Init(device) != 0)
         error();
       // retry
-      if (LMS_SetGaindB(device, LMS_CH_TX, 0, 0) != 0)
+      if (LMS_SetGaindB(device, LMS_CH_TX, LimeCfg.channel, 0) != 0)
         error();
     }
-    if (LMS_SetNormalizedGain(device, LMS_CH_TX, 0, 0.0) != 0)
+    if (LMS_SetNormalizedGain(device, LMS_CH_TX, LimeCfg.channel, 0.0) != 0)
       error();
 
     // Set RX center frequency
-    if (LMS_SetLOFrequency(device, LMS_CH_RX, 0, LimeCfg.frq) != 0)
+    if (LMS_SetLOFrequency(device, LMS_CH_RX, LimeCfg.channel, LimeCfg.frq) !=
+        0)
       error();
 
     // Set TX center frequency
-    if (LMS_SetLOFrequency(device, LMS_CH_TX, 0, LimeCfg.frq) != 0)
+    if (LMS_SetLOFrequency(device, LMS_CH_TX, LimeCfg.channel, LimeCfg.frq) !=
+        0)
       error();
 
     // Read back the updated frequency for later storage
-    if (LMS_GetLOFrequency(device, LMS_CH_RX, 0, &frq_read) != 0)
+    if (LMS_GetLOFrequency(device, LMS_CH_RX, LimeCfg.channel, &frq_read) != 0)
       error();
 
     // Enable RX channel
     // Channels are numbered starting at 0
-    if (LMS_EnableChannel(device, LMS_CH_RX, 0, true) != 0)
+    if (LMS_EnableChannel(device, LMS_CH_RX, LimeCfg.channel, true) != 0)
       error();
     // Enable TX channels
-    if (LMS_EnableChannel(device, LMS_CH_TX, 0, true) != 0)
+    if (LMS_EnableChannel(device, LMS_CH_TX, LimeCfg.channel, true) != 0)
+      error();
+
+    // fwd the TX1 LO to TX2
+    if (LMS_WriteParam(device, LMS7_EN_NEXTTX_TRF, true) != 0)
+      error();
+    if (LMS_WriteParam(device, LMS7_EN_NEXTRX_RFE, true) != 0)
       error();
 
     // apply DC offset in TxTSP
+    if (LMS_WriteParam(device, LMS7_MAC, LimeCfg.channel + 1) != 0)
+      error();
+    // if (LMS_WriteParam(device, LMS7_MAC, LimeCfg.channel) != 0) error();
     uint16_t DC_I, DC_Q, DC_EN;
     DC_EN = 0;
     if (LMS_WriteParam(device, LMS7_DCCORRI_TXTSP, LimeCfg.TX_IcorrDC) != 0)
@@ -907,8 +997,11 @@ int run_experiment(LimeConfig_t LimeCfg,
 
     // added by me as the IQ calibration did not happen on the chip from python
     // or c++
-    if (LMS_WriteParam(device, LMS7_MAC, 1) != 0)
+    if (LMS_WriteParam(device, LMS7_MAC, LimeCfg.channel + 1) != 0)
       error();
+
+    // if (LMS_WriteParam(device, LMS7_MAC, LimeCfg.channel) != 0)
+    //   error();
     /*
 // read back DC offset in TxTSP
 if (LMS_ReadParam(device, LMS7_DCCORRI_TXTSP, &DC_I) != 0) error();
@@ -923,62 +1016,76 @@ DC_Q << endl;
     lms_name_t antenna_list[10]; // large enough list for antenna names.
     // Alternatively, NULL can be passed to LMS_GetAntennaList() to obtain
     // number of antennae
-    if ((n = LMS_GetAntennaList(device, LMS_CH_RX, 0, antenna_list)) < 0)
+    int num_antennas;
+    if ((num_antennas = LMS_GetAntennaList(device, LMS_CH_RX, LimeCfg.channel,
+                                           antenna_list)) < 0)
       error();
 
     cout << "Available RX LNAs:\n"; // print available antennae names
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < num_antennas; i++)
       cout << i << ": " << antenna_list[i] << endl;
     // get and print antenna index and name
-    if ((n = LMS_GetAntenna(device, LMS_CH_RX, 0)) < 0)
+    int antenna_index;
+    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_RX, LimeCfg.channel)) <
+        0)
       error();
-    cout << "Automatically selected RX LNA: " << n << ": " << antenna_list[n]
-         << endl;
+    cout << "Automatically selected RX LNA: " << antenna_index << ": "
+         << antenna_list[antenna_index] << endl;
 
     // manually select antenna
-    if (LMS_SetAntenna(device, LMS_CH_RX, 0, LMS_PATH_LNAL) != 0)
+    if (LMS_SetAntenna(device, LMS_CH_RX, LimeCfg.channel, LMS_PATH_LNAL) != 0)
       error();
 
     // get and print antenna index and name
-    if ((n = LMS_GetAntenna(device, LMS_CH_RX, 0)) < 0)
+    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_RX, LimeCfg.channel)) <
+        0)
       error();
-    cout << "Manually selected RX LNA: " << n << ": " << antenna_list[n]
-         << endl;
+    cout << "Manually selected RX LNA: " << antenna_index << ": "
+         << antenna_list[antenna_index] << endl;
 
     // select antenna port
     // Alternatively, NULL can be passed to LMS_GetAntennaList() to obtain
     // number of antennae
-    if ((n = LMS_GetAntennaList(device, LMS_CH_TX, 0, antenna_list)) < 0)
+    if ((num_antennas = LMS_GetAntennaList(device, LMS_CH_TX, LimeCfg.channel,
+                                           antenna_list)) < 0)
       error();
 
     cout << "Available TX pathways:\n"; // print available antennae names
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < num_antennas; i++)
       cout << i << ": " << antenna_list[i] << endl;
 
     // get and print print antenna index and name
-    if ((n = LMS_GetAntenna(device, LMS_CH_TX, 0)) < 0)
+    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_TX, LimeCfg.channel)) <
+        0)
       error();
-    cout << "Automatically selected TX pathway: " << n << ": "
-         << antenna_list[n] << endl;
+    cout << "Automatically selected TX pathway: " << antenna_index << ": "
+         << antenna_list[antenna_index] << endl;
 
     // manually select antenna
-    int mychoice = LMS_PATH_TX1;
+    int tx_path = LMS_PATH_TX1;
     if (LimeCfg.frq > 1500e6)
-      mychoice = LMS_PATH_TX2;
-    if (LMS_SetAntenna(device, LMS_CH_TX, 0, mychoice) != 0)
+      tx_path = LMS_PATH_TX2;
+
+    if (LMS_SetAntenna(device, LMS_CH_TX, LimeCfg.channel, tx_path) != 0)
       error();
 
     // get and print print antenna index and name
-    if ((n = LMS_GetAntenna(device, LMS_CH_TX, 0)) < 0)
+    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_TX, LimeCfg.channel)) <
+        0)
       error();
-    cout << "Manually selected TX pathway: " << n << ": " << antenna_list[n]
-         << endl;
+    cout << "Manually selected TX pathway: " << antenna_index << ": "
+         << antenna_list[antenna_index] << endl;
 
     // Set sample rate, w/o oversampling, so that we can remove the invsinc
     // filter
     if (LMS_SetSampleRate(device, LimeCfg.srate, 1) != 0)
       error();
     // Invsinc, which removes that non-causal wiggle in timedomain
+
+    // if (LMS_WriteParam(device, LMS7_MAC, chn) != 0) error();
+    if (LMS_WriteParam(device, LMS7_MAC, LimeCfg.channel + 1) != 0)
+      error();
+
     if (LMS_WriteParam(device, LMS7_ISINC_BYP_TXTSP, 1) != 0)
       error();
     // CMIX: Disable, as it is not used
@@ -997,9 +1104,9 @@ DC_Q << endl;
       error();
 
     // Set RX and TX to the gain values
-    if (LMS_SetGaindB(device, LMS_CH_TX, 0, LimeCfg.TX_gain) != 0)
+    if (LMS_SetGaindB(device, LMS_CH_TX, LimeCfg.channel, LimeCfg.TX_gain) != 0)
       error();
-    if (LMS_SetGaindB(device, LMS_CH_RX, 0, LimeCfg.RX_gain) != 0)
+    if (LMS_SetGaindB(device, LMS_CH_RX, LimeCfg.channel, LimeCfg.RX_gain) != 0)
       error();
 
     cout << "After gain setting: " << endl;
@@ -1047,16 +1154,16 @@ DC_Q << endl;
     cout << "TX LPF bandwitdh range: " << range.min / 1e6 << " - "
          << range.max / 1e6 << " MHz\n\n";
 
-    if (LMS_SetLPFBW(device, LMS_CH_RX, 0, LimeCfg.RX_LPF) != 0)
+    if (LMS_SetLPFBW(device, LMS_CH_RX, LimeCfg.channel, LimeCfg.RX_LPF) != 0)
       error();
-    if (LMS_SetLPFBW(device, LMS_CH_TX, 0, LimeCfg.TX_LPF) != 0)
+    if (LMS_SetLPFBW(device, LMS_CH_TX, LimeCfg.channel, LimeCfg.TX_LPF) != 0)
       error();
 
     float_type LPFBW; // lowpass bandwidth
-    if (LMS_GetLPFBW(device, LMS_CH_RX, 0, &LPFBW) != 0)
+    if (LMS_GetLPFBW(device, LMS_CH_RX, LimeCfg.channel, &LPFBW) != 0)
       error();
     cout << "RX LPFBW: " << LPFBW / 1e6 << " MHz" << endl;
-    if (LMS_GetLPFBW(device, LMS_CH_TX, 0, &LPFBW) != 0)
+    if (LMS_GetLPFBW(device, LMS_CH_TX, LimeCfg.channel, &LPFBW) != 0)
       error();
     cout << "TX LPFBW: " << LPFBW / 1e6 << " MHz" << endl;
 
@@ -1110,7 +1217,7 @@ DC_Q << endl;
   // All streams setups should be done before starting streams. New streams
   // cannot be set-up if at least stream is running.
   for (int ii = 0; ii < chCount; ++ii) {
-    rx_streams[ii].channel = ii; // channel number
+    rx_streams[ii].channel = LimeCfg.channel; // channel number
     rx_streams[ii].fifoSize =
         buffersize * N_buffers_per_fifo; // fifo size in samples
     rx_streams[ii].throughputVsLatency =
@@ -1121,7 +1228,7 @@ DC_Q << endl;
     if (LMS_SetupStream(device, &rx_streams[ii]) != 0)
       error();
 
-    tx_streams[ii].channel = ii; // channel number
+    tx_streams[ii].channel = LimeCfg.channel; // channel number
     tx_streams[ii].fifoSize =
         buffersize * N_buffers_per_fifo; // fifo size in samples
     tx_streams[ii].throughputVsLatency =
@@ -1689,7 +1796,6 @@ DC_Q << endl;
             ii_TXrep++;
             // in case the entire experiment fits within the TX FIFO
             if (ii_TXrep == LimeCfg.repetitions) {
-              TXFIFO_slots = 0;
               break;
             }
           }
@@ -1704,7 +1810,6 @@ DC_Q << endl;
             ii_TXrep++;
             // in case the entire experiment fits within the TX FIFO
             if (ii_TXrep == LimeCfg.repetitions) {
-              TXFIFO_slots = 0;
               break;
             }
           }
@@ -1715,14 +1820,14 @@ DC_Q << endl;
     }
   }
 
-  /*
   // Check for the TX buffer and keep it filled
-  LMS_GetStreamStatus(tx_streams, &status); //Obtain TX stream stats
-  if (status.fifoFilledCount != 0) cout << TXFIFO_slots <<" TXFIFO slots free
-  before start: " << status.fifoFilledCount << " samples of " << status.fifoSize
-  << " with HW stamp " << status.timestamp <<" at RX timestamp" <<
-  rx_metadata.timestamp << endl;
-  */
+  LMS_GetStreamStatus(tx_streams, &status); // Obtain TX stream stats
+  if (status.fifoFilledCount != 0)
+    cout << TXFIFO_slots
+         << " TXFIFO slots free before start: " << status.fifoFilledCount
+         << " samples of " << status.fifoSize << " with HW stamp "
+         << status.timestamp << " at RX timestamp" << rx_metadata.timestamp
+         << endl;
 
   // Main acquisition loop
   while (ii_acq < LimeCfg.repetitions * LimeCfg.averages * num_phavar) {
@@ -2200,7 +2305,7 @@ DC_Q << endl;
 
 int run_experiment_from_LimeCfg(LimeConfig_t LimeCfg) {
   cout << "Running Version: " << VERSION << endl;
-  
+
   int Npulses = LimeCfg.Npulses; // Number of pulses from the LimeCfg
 
   // Getting HDF Attributes from dedicated function
@@ -2229,21 +2334,6 @@ int main(int argc, char **argv) {
   // Getting HDF Attributes from dedicated function
   std::vector<Config2HDFattr_t> HDFattrVector = getHDFAttributes(LimeCfg);
   size_t no_of_attr = HDFattrVector.size();
-
-  bool dumpFlag = false;
-
-  // Checking for dump flag
-  for (int i = 1; i < argc; ++i) {
-    if (strcmp(argv[i], "--dump") == 0) {
-      dumpFlag = true;
-    }
-  }
-
-  // If dump flag is set, dump the config and exit
-  if (dumpFlag) {
-    dumpConfig(HDFattrVector);
-    std::exit(0);
-  }
 
   // Parse command line arguments
   if (parseArguments(argc, argv, LimeCfg, HDFattrVector) != 0) {
