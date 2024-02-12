@@ -194,6 +194,8 @@ std::vector<Config2HDFattr_t> getHDFAttributes(LimeConfig_t &LimeCfg) {
   std::vector<Config2HDFattr_t> HDFattr = {
       {"sra", "SampleRate [Hz]", H5::PredType::IEEE_F32LE, &LimeCfg.srate, 1},
       {"chn", "Channel", H5::PredType::NATIVE_INT, &LimeCfg.channel, 1},
+      {"rmt", "RX Matching", H5::PredType::NATIVE_INT, &LimeCfg.RX_matching, 1},
+      {"tmt", "TX Matching", H5::PredType::NATIVE_INT, &LimeCfg.TX_matching, 1},
       {"lof", "LO Frequency [Hz]", H5::PredType::IEEE_F32LE, &LimeCfg.frq, 1},
       {"rlp", "RX LowPass BW [Hz]", H5::PredType::IEEE_F32LE, &LimeCfg.RX_LPF,
        1},
@@ -400,6 +402,8 @@ LimeConfig_t initializeLimeConfig(int Npulses) {
 
   LimeCfg.srate = 30.72e6; // sample rate of the IF DAC/ADC
   LimeCfg.channel = 0;     // channel to use,
+  LimeCfg.RX_matching = 0; // RX matching network - 0 to use previous logic
+  LimeCfg.TX_matching = 0; // TX matching network - 0 to use previous logic
   LimeCfg.frq = 50e6;      // LO carrier frequency
   LimeCfg.RX_gain = 20;    // total gain of the receiver
   LimeCfg.TX_gain = 30;    // total gain of the transmitter
@@ -1025,23 +1029,24 @@ DC_Q << endl;
     for (int i = 0; i < num_antennas; i++)
       cout << i << ": " << antenna_list[i] << endl;
     // get and print antenna index and name
-    int antenna_index;
-    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_RX, LimeCfg.channel)) <
-        0)
-      error();
-    cout << "Automatically selected RX LNA: " << antenna_index << ": "
-         << antenna_list[antenna_index] << endl;
+    int rx_path;
+
+    if (LimeCfg.RX_matching == 0) {
+      rx_path = LMS_PATH_LNAL;
+    } else {
+      rx_path = LimeCfg.RX_matching;
+    }
 
     // manually select antenna
-    if (LMS_SetAntenna(device, LMS_CH_RX, LimeCfg.channel, LMS_PATH_LNAL) != 0)
+    if (LMS_SetAntenna(device, LMS_CH_RX, LimeCfg.channel, rx_path) != 0)
       error();
 
     // get and print antenna index and name
-    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_RX, LimeCfg.channel)) <
+    if ((rx_path = LMS_GetAntenna(device, LMS_CH_RX, LimeCfg.channel)) <
         0)
       error();
-    cout << "Manually selected RX LNA: " << antenna_index << ": "
-         << antenna_list[antenna_index] << endl;
+    cout << "Manually selected RX LNA: " << rx_path << ": "
+         << antenna_list[rx_path] << endl;
 
     // select antenna port
     // Alternatively, NULL can be passed to LMS_GetAntennaList() to obtain
@@ -1054,27 +1059,26 @@ DC_Q << endl;
     for (int i = 0; i < num_antennas; i++)
       cout << i << ": " << antenna_list[i] << endl;
 
-    // get and print print antenna index and name
-    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_TX, LimeCfg.channel)) <
-        0)
-      error();
-    cout << "Automatically selected TX pathway: " << antenna_index << ": "
-         << antenna_list[antenna_index] << endl;
+    // Select TX pathway
+    int tx_path;
 
-    // manually select antenna
-    int tx_path = LMS_PATH_TX1;
-    if (LimeCfg.frq > 1500e6)
-      tx_path = LMS_PATH_TX2;
+    if (LimeCfg.TX_matching == 0) {
+      tx_path = LMS_PATH_TX1;
+      if (LimeCfg.frq > 1500e6)
+        tx_path = LMS_PATH_TX2;
+    } else {
+      tx_path = LimeCfg.TX_matching;
+    }
 
     if (LMS_SetAntenna(device, LMS_CH_TX, LimeCfg.channel, tx_path) != 0)
       error();
 
     // get and print print antenna index and name
-    if ((antenna_index = LMS_GetAntenna(device, LMS_CH_TX, LimeCfg.channel)) <
+    if ((tx_path = LMS_GetAntenna(device, LMS_CH_TX, LimeCfg.channel)) <
         0)
       error();
-    cout << "Manually selected TX pathway: " << antenna_index << ": "
-         << antenna_list[antenna_index] << endl;
+    cout << "Manually selected TX pathway: " << tx_path << ": "
+         << antenna_list[tx_path] << endl;
 
     // Set sample rate, w/o oversampling, so that we can remove the invsinc
     // filter
