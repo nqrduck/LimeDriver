@@ -28,6 +28,8 @@
 
 struct LimeConfig_t {
 
+  std::string device;
+
   float srate;
   int channel;
   int RX_matching;

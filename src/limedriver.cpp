@@ -114,6 +114,48 @@ std::vector<string> getDeviceList() {
   return deviceList;
 }
 
+lms_device_t *openDevice(const std::string &info) {
+  // Open the device with the given info string
+
+  string info_string = info;
+
+  if (info_string.empty()) {
+    std::vector<string> deviceList = getDeviceList();
+    if (deviceList.size() == 0) {
+      std::cout << "No devices found" << std::endl;
+      error();
+    }
+    
+    info_string = deviceList[0];
+  }
+
+  lms_device_t *dev = NULL;
+  if (LMS_Open(&dev, info.c_str(), NULL)) {
+    error();
+  }
+
+  return dev;
+}
+
+std::pair<int, int> getDeviceChannels(lms_device_t *dev) {
+  // Get the number of RX and TX channels of the device
+
+  lms_info_str_t list[10];
+  int rx = LMS_GetNumChannels(dev, LMS_CH_RX);
+  int tx = LMS_GetNumChannels(dev, LMS_CH_TX);
+
+  return std::make_pair(rx, tx);
+}
+
+std::pair<int, int> getChannelsFromInfo(const std::string &info) {
+  // Get the number of RX and TX channels from the device info string
+  lms_device_t *dev = openDevice(info);
+  std::pair<int, int> values = getDeviceChannels(dev);
+  LMS_Close(dev);
+  return values;
+}
+
+
 // Custom function to read back the gain of the RX/TX channels. The API function
 // GetGaindB has to be avoided, as it also modifies the gain, which is useless
 // and dangerous..
@@ -192,6 +234,9 @@ int GetGainRXTX(int *RXgain, int *TXgain) {
 
 std::vector<Config2HDFattr_t> getHDFAttributes(LimeConfig_t &LimeCfg) {
   std::vector<Config2HDFattr_t> HDFattr = {
+      {"dev", "Device",
+       H5::StrType(H5::PredType::C_S1, LimeCfg.device.length() + 1),
+       (void *)LimeCfg.device.c_str(), 1},
       {"sra", "SampleRate [Hz]", H5::PredType::IEEE_F32LE, &LimeCfg.srate, 1},
       {"chn", "Channel", H5::PredType::NATIVE_INT, &LimeCfg.channel, 1},
       {"rmt", "RX Matching", H5::PredType::NATIVE_INT, &LimeCfg.RX_matching, 1},
@@ -399,6 +444,8 @@ LimeConfig_t initializeLimeConfig(int Npulses) {
 
   // Set all the DEFAULT parameters. Command line arguments allow for
   // modification!
+
+  LimeCfg.device = "";
 
   LimeCfg.srate = 30.72e6; // sample rate of the IF DAC/ADC
   LimeCfg.channel = 0;     // channel to use,
@@ -830,18 +877,32 @@ int run_experiment(LimeConfig_t LimeCfg,
   if (list.size() < 1)
     return -1;
 
+  if (LimeCfg.device == "") {
+    LimeCfg.device = list[0];
+    cout << "Automatically selecting device: " << LimeCfg.device << endl;
+  }
+
   // open the first device
-  if (LMS_Open(&device, list[0].c_str(), NULL))
+  if (LMS_Open(&device, LimeCfg.device.c_str(), NULL))
     error();
 
   // Get number of channels
-  int num_rx_channels, num_tx_channels;
-  if ((num_rx_channels = LMS_GetNumChannels(device, LMS_CH_RX)) < 0)
-    error();
+  std::pair <int, int> num_channels = getDeviceChannels(device);
+  int num_rx_channels = num_channels.first;
+  int num_tx_channels = num_channels.second;
   cout << "Number of RX channels: " << num_rx_channels << endl;
-  if ((num_tx_channels = LMS_GetNumChannels(device, LMS_CH_TX)) < 0)
-    error();
   cout << "Number of TX channels: " << num_tx_channels << endl;
+
+  if (num_rx_channels < 1 || num_tx_channels < 1) {
+    cout << "No RX or TX channels found!" << endl;
+    error();
+  }
+
+  // Check if the channel selected in the config is valid
+  if (LimeCfg.channel < 0 || LimeCfg.channel >= num_rx_channels) {
+    cout << "Invalid channel selected: " << LimeCfg.channel << endl;
+    error();
+  }
 
   // check if the settings are already there
   float_type frq_read;
@@ -1028,8 +1089,7 @@ DC_Q << endl;
       error();
 
     // get and print antenna index and name
-    if ((rx_path = LMS_GetAntenna(device, LMS_CH_RX, LimeCfg.channel)) <
-        0)
+    if ((rx_path = LMS_GetAntenna(device, LMS_CH_RX, LimeCfg.channel)) < 0)
       error();
     cout << "Manually selected RX LNA: " << rx_path << ": "
          << antenna_list[rx_path] << endl;
@@ -1060,8 +1120,7 @@ DC_Q << endl;
       error();
 
     // get and print print antenna index and name
-    if ((tx_path = LMS_GetAntenna(device, LMS_CH_TX, LimeCfg.channel)) <
-        0)
+    if ((tx_path = LMS_GetAntenna(device, LMS_CH_TX, LimeCfg.channel)) < 0)
       error();
     cout << "Manually selected TX pathway: " << tx_path << ": "
          << antenna_list[tx_path] << endl;
