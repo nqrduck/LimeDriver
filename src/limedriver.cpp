@@ -133,7 +133,7 @@ lms_device_t *openDevice(const std::string &info) {
   cout << "Opening device: " << info_string << endl;
 
   lms_device_t *dev = NULL;
-  if (LMS_Open(&dev, info.c_str(), NULL)) {
+  if (LMS_Open(&dev, info_string.c_str(), NULL)) {
     error();
   }
 
