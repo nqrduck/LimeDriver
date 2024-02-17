@@ -140,6 +140,9 @@ LimeConfig_t initializeLimeConfig(int Npulses);
 */
 int run_experiment_from_LimeCfg(LimeConfig_t LimeCfg);
 
+std::pair<int, int> getDeviceChannels(lms_device_t *dev);
+std::pair<int, int> getChannelsFromInfo(const std::string &info);
+
 std::vector<std::string> getDeviceList();
 
 #endif // LIMECONFIG_H
