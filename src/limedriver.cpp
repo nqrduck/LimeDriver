@@ -15,6 +15,7 @@ h5c++ -shlib limedriver.cpp -std=c++11 -lLimeSuite -o limedriver
 
 #include "limedriver.h"
 #include <H5PredType.h>
+#include <iostream>
 #include <lime/LimeSuite.h>
 #include <vector>
 
@@ -128,6 +129,8 @@ lms_device_t *openDevice(const std::string &info) {
     
     info_string = deviceList[0];
   }
+
+  cout << "Opening device: " << info_string << endl;
 
   lms_device_t *dev = NULL;
   if (LMS_Open(&dev, info.c_str(), NULL)) {
