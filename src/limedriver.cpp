@@ -130,8 +130,6 @@ lms_device_t *openDevice(const std::string &info) {
     info_string = deviceList[0];
   }
 
-  cout << "Opening device: " << info_string << endl;
-
   lms_device_t *dev = NULL;
   if (LMS_Open(&dev, info_string.c_str(), NULL)) {
     error();
