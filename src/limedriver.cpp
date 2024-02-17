@@ -834,20 +834,6 @@ int run_experiment(LimeConfig_t LimeCfg,
   if (LMS_Open(&device, list[0].c_str(), NULL))
     error();
 
-  /*
-          //print available antennae names
-          //select antenna port
-          lms_name_t antenna_list[10];    //large enough list for antenna names.
-          //Alternatively, NULL can be passed to LMS_GetAntennaList() to obtain
-     number of antennae if ((n = LMS_GetAntennaList(device, LMS_CH_RX, 0,
-     antenna_list)) < 0) error();
-
-          // get and print antenna index and name
-          if ((n = LMS_GetAntenna(device, LMS_CH_RX, 0)) < 0) error();
-          cout << "Automatically selected RX LNA: " << n << ": " <<
-     antenna_list[n] << endl;
-  */
-
   // Get number of channels
   int num_rx_channels, num_tx_channels;
   if ((num_rx_channels = LMS_GetNumChannels(device, LMS_CH_RX)) < 0)
