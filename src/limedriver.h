@@ -140,4 +140,6 @@ LimeConfig_t initializeLimeConfig(int Npulses);
 */
 int run_experiment_from_LimeCfg(LimeConfig_t LimeCfg);
 
+std::vector<std::string> getDeviceList();
+
 #endif // LIMECONFIG_H
