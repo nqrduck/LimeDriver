@@ -24,9 +24,11 @@
 #include <direct.h> // _mkdir
 #endif
 
-#define VERSION "0.3.0"
+#define VERSION "0.4.0"
 
 struct LimeConfig_t {
+
+  std::string device;
 
   float srate;
   int channel;
@@ -137,5 +139,10 @@ LimeConfig_t initializeLimeConfig(int Npulses);
     return: 0 if successful, -1 if error
 */
 int run_experiment_from_LimeCfg(LimeConfig_t LimeCfg);
+
+std::pair<int, int> getDeviceChannels(lms_device_t *dev);
+std::pair<int, int> getChannelsFromInfo(const std::string &info);
+
+std::vector<std::string> getDeviceList();
 
 #endif // LIMECONFIG_H
