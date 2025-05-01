@@ -15,13 +15,13 @@ jobs:
 
     steps:
     - name: Set up build requirements
-      run: sudo apt-get update -y && sudo apt-get install -y cmake g++
+      run: apt-get update -y && apt-get install -y cmake g++
 
     - name: Install LimeSuite dependencies
-      run: sudo apt-get update -y && sudo apt-get install -y limesuite liblimesuite-dev
+      run: apt-get update -y && apt-get install -y limesuite liblimesuite-dev
 
     - name: Install HDF5 dependencies
-      run: sudo apt-get update -y && sudo apt-get install -y libhdf5-dev
+      run: apt-get update -y && apt-get install -y libhdf5-dev
     
     - name: Check out code
       uses: actions/checkout@v3
