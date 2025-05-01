@@ -30,7 +30,7 @@ jobs:
       run: cmake -S . -B build && cmake --build build
     
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v2
+      uses: https://code.forgejo.org/forgejo/upload-artifact@v4
       with:
         name: build
         path: build
